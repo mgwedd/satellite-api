@@ -7,8 +7,13 @@ const { satelliteService } = require('../services');
 const { logger } = require('../config');
 
 const bulkCreateSatellites = catchAsync(async (req, res) => {
-  const maintenanceRequest = await satelliteService.bulkCreateSatellites(req.body);
-  res.status(httpStatus.CREATED).send(maintenanceRequest);
+  const satellites = await satelliteService.bulkCreateSatellites(req.body);
+  res.status(satellites);
+});
+
+const createSatellite = catchAsync(async (req, res) => {
+  const satellite = await satelliteService.createSatellite(req.body);
+  res.status(httpStatus.CREATED).send(satellite);
 });
 
 const listSatellites = catchAsync(async (req, res) => {
@@ -45,6 +50,7 @@ const getOverhead = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  createSatellite,
   bulkCreateSatellites,
   listSatellites,
   getSatellite,

@@ -9,11 +9,28 @@ const schemaOptions = {
   },
 };
 
+const tleSchema = mongoose.Schema({
+  tleLineOne: {
+    type: String,
+    trim: true,
+    required: true,
+  },
+  tleLineTwo: {
+    type: String,
+    trim: true,
+    required: true,
+  },
+});
+
 const satelliteSchema = mongoose.Schema(
   {
     name: {
       type: String,
       trim: true,
+    },
+    tle: {
+      type: tleSchema,
+      required: true,
     },
     satrec: {
       type: Object,
