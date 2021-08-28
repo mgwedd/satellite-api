@@ -4,10 +4,6 @@ This API enables you to determine when a given orbital satellite will likely be 
 
 The API is deployed and available on the internet at [this URL](https://tle-api.herokuapp.com/)
 
-## Routes
-
-1. `GET /` renders the server index page
-
 ## Set up
 
 1. Clone the server to your local machine
