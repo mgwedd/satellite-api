@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { ObjectId } = require('mongoose');
+const mongoose = require('mongoose');
 
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
@@ -24,7 +24,7 @@ const listSatellites = catchAsync(async (req, res) => {
 
 const getSatellite = catchAsync(async (req, res) => {
   logger.info(req.params);
-  const satellite = await satelliteService.getSatelliteById(ObjectId(req.params.id));
+  const satellite = await satelliteService.getSatelliteById(mongoose.Types.ObjectId(req.params.id));
   if (!satellite) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Satellite not found');
   }
@@ -32,12 +32,12 @@ const getSatellite = catchAsync(async (req, res) => {
 });
 
 const updateSatellite = catchAsync(async (req, res) => {
-  const updatedSatellite = await satelliteService.updateSatelliteById(ObjectId(req.params.id), req.body);
+  const updatedSatellite = await satelliteService.updateSatelliteById(mongoose.Types.ObjectId(req.params.id), req.body);
   res.send(updatedSatellite);
 });
 
 const deleteSatellite = catchAsync(async (req, res) => {
-  await satelliteService.deleteSatelliteById(ObjectId(req.params.id));
+  await satelliteService.deleteSatelliteById(mongoose.Types.ObjectId(req.params.id));
   res.status(httpStatus.NO_CONTENT).send();
 });
 

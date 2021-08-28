@@ -10,12 +10,12 @@ const schemaOptions = {
 };
 
 const tleSchema = mongoose.Schema({
-  tleLineOne: {
+  lineOne: {
     type: String,
     trim: true,
     required: true,
   },
-  tleLineTwo: {
+  lineTwo: {
     type: String,
     trim: true,
     required: true,
