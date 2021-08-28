@@ -1,7 +1,7 @@
 {
-  "name": "sattelite-api",
+  "name": "satellite-api",
   "version": "0.1.0",
-  "description": "An API for determining visibility of sattelites given TLE data",
+  "description": "An API for determining visibility of satellites given TLE data",
   "main": "server.js",
   "engines": {
     "node": ">=14.0.0"

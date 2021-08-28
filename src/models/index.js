@@ -1,1 +1,1 @@
-module.exports.Sattelite = require('./sattelite.model');
+module.exports.Satellite = require('./satellite.model');

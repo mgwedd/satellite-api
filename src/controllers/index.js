@@ -1,1 +1,1 @@
-module.exports.satteliteController = require('./sattelite.controller');
+module.exports.satelliteController = require('./satellite.controller');

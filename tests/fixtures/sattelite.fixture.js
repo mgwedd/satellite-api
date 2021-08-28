@@ -1,26 +1,26 @@
 const mongoose = require('mongoose');
 const faker = require('faker');
 
-const Sattelite = require('../../src/models/sattelite.model');
+const Satellite = require('../../src/models/satellite.model');
 
-const satteliteOne = {
+const satelliteOne = {
   _id: mongoose.Types.ObjectId(),
   buildingCode: faker.address.stateAbbr(),
   description: faker.lorem.sentence(),
 };
 
-const satteliteTwo = {
+const satelliteTwo = {
   _id: mongoose.Types.ObjectId(),
   buildingCode: faker.address.stateAbbr(),
   description: faker.lorem.sentence(),
 };
 
-const insertSattelites = async (sattelites) => {
-  await Sattelite.insertMany(sattelites);
+const insertSatellites = async (satellites) => {
+  await Satellite.insertMany(satellites);
 };
 
 module.exports = {
-  satteliteOne,
-  satteliteTwo,
-  insertSattelites,
+  satelliteOne,
+  satelliteTwo,
+  insertSatellites,
 };

@@ -1,6 +1,6 @@
-# Sattelite API
+# Satellite API
 
-This API enables you to determine when a given orbital sattelite will likely be reachable from a ground station.
+This API enables you to determine when a given orbital satellite will likely be reachable from a ground station.
 
 The API is deployed and available on the internet at [this URL](https://tle-api.herokuapp.com/)
 
