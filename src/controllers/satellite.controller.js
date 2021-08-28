@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
+const satelliteJS = require('satellite.js');
 
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
@@ -7,8 +8,9 @@ const { satelliteService } = require('../services');
 const { logger } = require('../config');
 
 const createSatellitesFromTLE = catchAsync(async (req, res) => {
-  const satellites = await satelliteService.createSatellitesFromTLE(req.files.tle);
-  res.status(satellites);
+  res.status(httpStatus.NOT_IMPLEMENTED);
+  // const satellites = await satelliteService.createSatellitesFromTLE(req.files.tle);
+  // res.status(httpStatus.CREATED).send(satellites);
 });
 
 const createSatellite = catchAsync(async (req, res) => {
@@ -17,13 +19,14 @@ const createSatellite = catchAsync(async (req, res) => {
 });
 
 const listSatellites = catchAsync(async (req, res) => {
+  // TODO use redis cache before looking up in mongodb
   // TODO Add filtering and pagination options in a production-ready version of this server so the API can scale
   const satellitesList = await satelliteService.listSatellites();
   res.send(satellitesList);
 });
 
 const getSatellite = catchAsync(async (req, res) => {
-  logger.info(req.params);
+  // TODO use redis cache before looking up in mongodb
   const satellite = await satelliteService.getSatelliteById(mongoose.Types.ObjectId(req.params.id));
   if (!satellite) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Satellite not found');
@@ -43,10 +46,61 @@ const deleteSatellite = catchAsync(async (req, res) => {
 
 const getNextVisible = catchAsync(async (req, res) => {
   res.send(httpStatus.NOT_IMPLEMENTED);
+  const { id } = req.params;
+  const { groundPosition } = req.query.params;
+  // TODO use redis cache before looking up in mongodb, looking up request params
+
+  const satellite = await satelliteService.getSatelliteById(mongoose.Types.ObjectId(req.params.id));
+  if (!satellite) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Satellite not found');
+  }
+
+  // PSEUDOCODE — ran out of time //
+
+  // TODO determine whether the satellite will ever pass over the groundPosition by seeing whether the given groundPosition
+  // is ever a point contained within the polygon on the ground from which the satellite is visible at any given point in one full orbit of earth.
+  // I'm not sure which of the satellite.js methods is appropriate for this yet.
+  // If it never flies over the observer, then return a 404
+
+  // TODO set a threshold for visibility, maybe 5 degrees elevation to account for mountains / trees etc
+
+  // TODO take the total duration of a full earth orbit for the satellite
+
+  // TODO while we have not yet found an elevation for the satellite that meets the threshold...
+  // TODO starting at the current time, calculate the elevation of the satellite as below in the getOverhead controller method
+  // exit condition - If the elevation meets the threshold, break out of the while loop and return this point in time as the next pass
+  // continue condition - if this current elevation is below the threshold still, then continue to the next minute in the orbit duration
 });
 
 const getOverhead = catchAsync(async (req, res) => {
-  res.send(httpStatus.NOT_IMPLEMENTED);
+  const { groundPosition, time } = req.query.params; // time = timeSinceTleEpochMinutes
+  // TODO use redis cache before looking up in mongodb, looking up request params
+
+  const satellitesList = await satelliteService.listSatellites();
+
+  const observerGd = {
+    longitude: satelliteJS.degreesToRadians(groundPosition.lon),
+    latitude: satelliteJS.degreesToRadians(groundPosition.lat),
+    height: 0.37,
+  };
+
+  const gmst = satelliteJS.gstime(new Date(time));
+
+  const elevations = [];
+  satellitesList.forEach((satellite) => {
+    const { position: positionEci } = satelliteJS.sgp4(satellite.satrec, time);
+    const positionEcf = satelliteJS.eciToEcf(positionEci, gmst);
+    const { elevation } = satelliteJS.ecfToLookAngles(observerGd, positionEcf);
+    elevations.push({ satellite, elevation });
+  });
+
+  const overheadElevation = 90;
+
+  const closestToOverhead = elevations.reduce((a, b) => {
+    return Math.abs(b.elevation - overheadElevation) < Math.abs(a.elevation - overheadElevation) ? b : a;
+  });
+
+  res.send(closestToOverhead);
 });
 
 module.exports = {
