@@ -8,7 +8,7 @@ const httpStatus = require('http-status');
 
 const config = require('./config/config');
 const morgan = require('./config/morgan');
-const apiRoutes = require('./routes/v1');
+const apiRoutes = require('./routes');
 const ApiError = require('./utils/ApiError');
 const { errorConverter, errorHandler } = require('./middleware/error');
 

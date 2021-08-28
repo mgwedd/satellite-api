@@ -16,7 +16,7 @@
     "lint:fix": "eslint . --fix",
     "prettier": "prettier --check **/*.js",
     "prettier:fix": "prettier --write **/*.js",
-    "predeploy": "npm audit",
+    "predeploy": "yarn audit",
     "deploy": "git push heroku development:master"
   },
   "keywords": [],

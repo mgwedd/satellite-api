@@ -11,7 +11,7 @@ const routes = [
     route: indexRoute,
   },
   {
-    path: '/satellite',
+    path: `/api/v1/satellite`,
     route: satelliteRoute,
   },
 ];
