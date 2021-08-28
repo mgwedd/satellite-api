@@ -2,7 +2,7 @@
 
 This API enables you to determine when a given orbital satellite will likely be reachable from a ground station.
 
-The API is deployed and available on the internet at [this URL](https://tle-api.herokuapp.com/)
+The API is deployed and available on the internet at [this URL](https://whispering-mountain-80644.herokuapp.com/)
 
 ## Set up
 
