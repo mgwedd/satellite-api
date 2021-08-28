@@ -8,7 +8,7 @@ const router = express.Router();
 router
   .route('/')
   .get(satelliteController.listSatellites)
-  .post(satelliteController.createSatellite);
+  .post(satelliteController.createSatellitesFromTLE);
 
 router
   .route('/:id')

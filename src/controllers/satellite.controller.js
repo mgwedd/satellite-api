@@ -6,8 +6,8 @@ const catchAsync = require('../utils/catchAsync');
 const { satelliteService } = require('../services');
 const { logger } = require('../config');
 
-const bulkCreateSatellites = catchAsync(async (req, res) => {
-  const satellites = await satelliteService.bulkCreateSatellites(req.body);
+const createSatellitesFromTLE = catchAsync(async (req, res) => {
+  const satellites = await satelliteService.createSatellitesFromTLE(req.files.tle);
   res.status(satellites);
 });
 
@@ -51,7 +51,7 @@ const getOverhead = catchAsync(async (req, res) => {
 
 module.exports = {
   createSatellite,
-  bulkCreateSatellites,
+  createSatellitesFromTLE,
   listSatellites,
   getSatellite,
   updateSatellite,

@@ -1,7 +1,8 @@
 const express = require('express');
+const fileUpload = require('express-fileupload');
+const mongoSanitize = require('express-mongo-sanitize');
 const helmet = require('helmet');
 const xss = require('xss-clean');
-const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
 const cors = require('cors');
 const httpStatus = require('http-status');
@@ -21,6 +22,9 @@ if (config.env !== 'test') {
 
 // set security HTTP headers
 app.use(helmet());
+
+// Add file upload middleware
+app.use(fileUpload());
 
 // parse request body as json
 app.use(express.json());

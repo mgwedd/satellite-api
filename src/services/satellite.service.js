@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const satelliteJS = require('satellite.js');
-const mongoose = require('mongoose');
+// const mongoose = require('mongoose');
 
 const { Satellite } = require('../models');
 const ApiError = require('../utils/ApiError');
@@ -30,21 +30,10 @@ const createSatellite = async (requestData) => {
  * Bulk create satellites from TLE data
  * @returns {Promise<Array.Satellite>}
  */
-const bulkCreateSatellites = async (tles) => {
-  // This assumes prelim transformation of the tle data from .txt to an array of TLE objects with name, lineOne, and lineTwo
-  const satellites = tles.map(({ name, lineOne, lineTwo }) => {
-    const satrec = satelliteJS.twoline2satrec(lineOne, lineTwo);
-    return {
-      _id: mongoose.Types.ObjectId(),
-      name,
-      tle: {
-        lineOne,
-        lineTwo,
-      },
-      satrec,
-    };
-  });
-  Satellite.insertMany(satellites);
+const createSatellitesFromTLE = async (tleFile) => {
+  // TODO transform tleFile into an object where each attribute contains the fields the satellite schema expects
+  // TODO create a satellite object with mongoose for each tle record, following the approach in createSatellite above
+  // Satellite.insertMany(/* TODO */);
 };
 
 /**
@@ -100,7 +89,7 @@ const deleteSatelliteById = async (id) => {
 
 module.exports = {
   createSatellite,
-  bulkCreateSatellites,
+  createSatellitesFromTLE,
   listSatellites,
   getSatelliteById,
   updateSatelliteById,
