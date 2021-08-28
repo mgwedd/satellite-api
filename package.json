@@ -17,7 +17,7 @@
     "prettier": "prettier --check **/*.js",
     "prettier:fix": "prettier --write **/*.js",
     "predeploy": "npm audit",
-    "deploy": "git push heroku master"
+    "deploy": "git push heroku development:master"
   },
   "keywords": [],
   "author": "Michael Wedd",

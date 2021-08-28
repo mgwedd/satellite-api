@@ -10,7 +10,7 @@ const routes = [
     route: indexRoute,
   },
   {
-    path: `/api/${process.env.API_VESRION}/satellite`,
+    path: `/api/${process.env.API_VERSION}/satellite`,
     route: satelliteRoute,
   },
 ];
