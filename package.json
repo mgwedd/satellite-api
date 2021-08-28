@@ -1,7 +1,7 @@
 {
   "name": "sattelite-api",
   "version": "0.1.0",
-  "description": "An API for determining when a given orbital sattelite will likely be reachable from a ground station",
+  "description": "An API for determining visibility of sattelites given TLE data",
   "main": "server.js",
   "engines": {
     "node": ">=14.0.0"
