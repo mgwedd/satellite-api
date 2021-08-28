@@ -1,5 +1,6 @@
 const express = require('express');
-const satelliteRoute = require('./satellite.route');
+
+const satelliteRoute = require('./v1/satellite.route');
 const indexRoute = require('./v1/default.route');
 
 const router = express.Router();
@@ -10,7 +11,7 @@ const routes = [
     route: indexRoute,
   },
   {
-    path: '/api',
+    path: '/satellite',
     route: satelliteRoute,
   },
 ];
