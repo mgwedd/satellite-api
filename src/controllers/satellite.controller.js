@@ -5,7 +5,6 @@ const satelliteJS = require('satellite.js');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { satelliteService } = require('../services');
-const { logger } = require('../config');
 
 const createSatellitesFromTLE = catchAsync(async (req, res) => {
   res.status(httpStatus.NOT_IMPLEMENTED);
