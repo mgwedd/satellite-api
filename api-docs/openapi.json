@@ -12,17 +12,95 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/v1/astrodynamics/overhead": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Get Overhead Satellite",
+        "description": "Computes the satellite closest to overhead (highest elevation) across all tracked satellites using parallel Rayon propagation.",
+        "operationId": "getOverheadSatellite",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "description": "Observer altitude above sea level in meters",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "description": "UTC timestamp for calculation epoch (defaults to current time if omitted)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overhead satellite computed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverheadResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No satellite overhead found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/pipelines/sync": {
       "post": {
         "tags": [
           "Pipelines"
         ],
-        "summary": "Triggers automated CelesTrak discovery pipeline sync for a specific satellite group",
-        "operationId": "trigger_pipeline_sync",
+        "summary": "Trigger CelesTrak Pipeline Sync",
+        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group.",
+        "operationId": "triggerPipelineSync",
         "parameters": [
           {
             "name": "group",
             "in": "query",
+            "description": "CelesTrak satellite group name (e.g. 'stations', 'visual', 'starlink', 'weather', 'active', 'last-30-days')",
             "required": false,
             "schema": {
               "type": "string",
@@ -40,6 +118,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Pipeline sync execution failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -49,7 +137,9 @@
         "tags": [
           "Satellites"
         ],
-        "operationId": "list_satellites",
+        "summary": "List Satellites",
+        "description": "Retrieves a paginated list of satellites using base64 checkpoint cursors.",
+        "operationId": "listSatellites",
         "parameters": [
           {
             "name": "limit",
@@ -88,7 +178,9 @@
         "tags": [
           "Satellites"
         ],
-        "operationId": "create_satellite",
+        "summary": "Create Satellite",
+        "description": "Creates a new satellite record from Two-Line Element (TLE) set data.",
+        "operationId": "createSatellite",
         "requestBody": {
           "content": {
             "application/json": {
@@ -111,71 +203,14 @@
             }
           },
           "400": {
-            "description": "Invalid request payload"
-          }
-        }
-      }
-    },
-    "/v1/satellites/overhead": {
-      "get": {
-        "tags": [
-          "Astrodynamics"
-        ],
-        "summary": "Computes the satellite closest to overhead (highest elevation) across all satellites in parallel using **Rayon** with **Tiered Cache**",
-        "operationId": "get_overhead",
-        "parameters": [
-          {
-            "name": "lat",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          {
-            "name": "lon",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          {
-            "name": "alt",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double",
-              "nullable": true
-            }
-          },
-          {
-            "name": "time",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Overhead satellite computed successfully",
+            "description": "Invalid request payload",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OverheadResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
-          },
-          "404": {
-            "description": "No satellite overhead found"
           }
         }
       }
@@ -185,7 +220,9 @@
         "tags": [
           "Satellites"
         ],
-        "operationId": "get_satellite",
+        "summary": "Get Satellite by ID",
+        "description": "Retrieves details for a specific satellite by its unique UUID.",
+        "operationId": "getSatellite",
         "parameters": [
           {
             "name": "id",
@@ -210,7 +247,14 @@
             }
           },
           "404": {
-            "description": "Satellite not found"
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -218,7 +262,9 @@
         "tags": [
           "Satellites"
         ],
-        "operationId": "delete_satellite",
+        "summary": "Delete Satellite",
+        "description": "Deletes a satellite record by its unique UUID.",
+        "operationId": "deleteSatellite",
         "parameters": [
           {
             "name": "id",
@@ -236,7 +282,14 @@
             "description": "Satellite deleted successfully"
           },
           "404": {
-            "description": "Satellite not found"
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -244,7 +297,9 @@
         "tags": [
           "Satellites"
         ],
-        "operationId": "update_satellite",
+        "summary": "Update Satellite",
+        "description": "Updates a satellite's name or TLE orbital parameters.",
+        "operationId": "updateSatellite",
         "parameters": [
           {
             "name": "id",
@@ -279,7 +334,14 @@
             }
           },
           "404": {
-            "description": "Satellite not found"
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -289,8 +351,9 @@
         "tags": [
           "Astrodynamics"
         ],
-        "summary": "Calculates the next visible pass for a specific satellite above elevation threshold with **Tiered Cache**",
-        "operationId": "get_next_visible",
+        "summary": "Get Next Visible Pass",
+        "description": "Calculates the next visible pass for a specific satellite above elevation threshold.",
+        "operationId": "getNextVisiblePass",
         "parameters": [
           {
             "name": "id",
@@ -305,6 +368,7 @@
           {
             "name": "lat",
             "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
             "required": true,
             "schema": {
               "type": "number",
@@ -314,6 +378,7 @@
           {
             "name": "lon",
             "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
             "required": true,
             "schema": {
               "type": "number",
@@ -323,6 +388,7 @@
           {
             "name": "alt",
             "in": "query",
+            "description": "Observer altitude above sea level in meters",
             "required": false,
             "schema": {
               "type": "number",
@@ -333,6 +399,7 @@
           {
             "name": "threshold_deg",
             "in": "query",
+            "description": "Minimum elevation angle threshold in degrees (default: 5.0 deg)",
             "required": false,
             "schema": {
               "type": "number",
@@ -353,7 +420,14 @@
             }
           },
           "404": {
-            "description": "Satellite not found"
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -377,6 +451,23 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error",
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
@@ -481,7 +572,7 @@
         "type": "object",
         "required": [
           "group",
-          "synced_count",
+          "syncedCount",
           "message"
         ],
         "properties": {
@@ -491,7 +582,7 @@
           "message": {
             "type": "string"
           },
-          "synced_count": {
+          "syncedCount": {
             "type": "integer",
             "minimum": 0
           }

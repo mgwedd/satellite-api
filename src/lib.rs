@@ -40,6 +40,7 @@ use utoipa_swagger_ui::SwaggerUi;
             handlers::satellite_handler::PipelineSyncResponse,
             pagination::PaginationMeta,
             pagination::PaginatedResponseSatellite,
+            error::ErrorResponse,
         )
     ),
     tags(
@@ -62,7 +63,7 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
                 .patch(handlers::update_satellite)
                 .delete(handlers::delete_satellite),
         )
-        .route("/satellites/overhead", get(handlers::get_overhead))
+        .route("/astrodynamics/overhead", get(handlers::get_overhead))
         .route(
             "/satellites/:id/next-visible",
             get(handlers::get_next_visible),

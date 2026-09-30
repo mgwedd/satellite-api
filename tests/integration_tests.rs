@@ -67,7 +67,7 @@ async fn test_full_satellite_crud_and_overhead() {
     // 4. Test Rayon overhead satellite calculation at epoch time
     let req = Request::builder()
         .method("GET")
-        .uri("/v1/satellites/overhead?lat=34.05&lon=-118.25&time=2021-08-27T15:52:50Z")
+        .uri("/v1/astrodynamics/overhead?lat=34.05&lon=-118.25&time=2021-08-27T15:52:50Z")
         .body(Body::empty())
         .unwrap();
 
@@ -115,7 +115,7 @@ async fn test_openapi_and_swagger_ui_endpoints() {
     assert!(openapi_json["openapi"].as_str().unwrap().starts_with("3."));
     assert!(openapi_json["paths"]["/v1/satellites"].is_object());
     assert!(openapi_json["paths"]["/v1/satellites/{id}"].is_object());
-    assert!(openapi_json["paths"]["/v1/satellites/overhead"].is_object());
+    assert!(openapi_json["paths"]["/v1/astrodynamics/overhead"].is_object());
     assert!(openapi_json["paths"]["/v1/pipelines/sync"].is_object());
     assert!(openapi_json["components"]["schemas"]["Satellite"].is_object());
     assert!(openapi_json["components"]["schemas"]["Tle"].is_object());

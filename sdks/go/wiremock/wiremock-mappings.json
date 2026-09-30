@@ -1,0 +1,253 @@
+{
+  "mappings": [
+    {
+      "id": "f8199d1c-1b7c-4663-a235-ea31dffb5b0f",
+      "name": "Get Overhead Satellite - default",
+      "request": {
+        "urlPathTemplate": "/v1/astrodynamics/overhead",
+        "method": "GET",
+        "queryParameters": {
+          "lat": {
+            "equalTo": "1.1"
+          },
+          "lon": {
+            "equalTo": "1.1"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"elevation\": 1.1,\n  \"satellite\": {\n    \"createdDate\": \"2024-01-15T09:30:00Z\",\n    \"id\": \"id\",\n    \"lastModifiedDate\": \"2024-01-15T09:30:00Z\",\n    \"name\": \"name\",\n    \"tle\": {\n      \"lineOne\": \"lineOne\",\n      \"lineTwo\": \"lineTwo\"\n    }\n  }\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "f8199d1c-1b7c-4663-a235-ea31dffb5b0f",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      },
+      "postServeActions": []
+    },
+    {
+      "id": "e843c7c7-c65a-436e-96da-4b9f5b83038f",
+      "name": "Get Next Visible Pass - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites/{id}/next-visible",
+        "method": "GET",
+        "pathParameters": {
+          "id": {
+            "equalTo": "id"
+          }
+        },
+        "queryParameters": {
+          "lat": {
+            "equalTo": "1.1"
+          },
+          "lon": {
+            "equalTo": "1.1"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"azimuthDeg\": 1.1,\n  \"elevationDeg\": 1.1,\n  \"passTime\": \"2024-01-15T09:30:00Z\",\n  \"rangeKm\": 1.1,\n  \"satelliteId\": \"satelliteId\",\n  \"satelliteName\": \"satelliteName\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "e843c7c7-c65a-436e-96da-4b9f5b83038f",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    },
+    {
+      "id": "0a96fd67-1ec2-41d0-b921-9e1d876dc87f",
+      "name": "Trigger CelesTrak Pipeline Sync - default",
+      "request": {
+        "urlPathTemplate": "/v1/pipelines/sync",
+        "method": "POST"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"group\": \"group\",\n  \"message\": \"message\",\n  \"syncedCount\": 1\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "0a96fd67-1ec2-41d0-b921-9e1d876dc87f",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    },
+    {
+      "id": "78485b1a-f879-41a6-8f34-a2bc2299b239",
+      "name": "List Satellites - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites",
+        "method": "GET"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"data\": [\n    {\n      \"createdDate\": \"2024-01-15T09:30:00Z\",\n      \"id\": \"id\",\n      \"lastModifiedDate\": \"2024-01-15T09:30:00Z\",\n      \"name\": \"name\",\n      \"tle\": {\n        \"lineOne\": \"lineOne\",\n        \"lineTwo\": \"lineTwo\"\n      }\n    }\n  ],\n  \"pagination\": {\n    \"hasMore\": true,\n    \"limit\": 1,\n    \"nextCursor\": \"nextCursor\",\n    \"totalCount\": 1\n  }\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "78485b1a-f879-41a6-8f34-a2bc2299b239",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      },
+      "postServeActions": []
+    },
+    {
+      "id": "2fd688d7-c3f1-47b5-b45e-fa4f96484043",
+      "name": "Create Satellite - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites",
+        "method": "POST"
+      },
+      "response": {
+        "status": 201,
+        "body": "{\n  \"createdDate\": \"2024-01-15T09:30:00Z\",\n  \"id\": \"id\",\n  \"lastModifiedDate\": \"2024-01-15T09:30:00Z\",\n  \"name\": \"name\",\n  \"tle\": {\n    \"lineOne\": \"lineOne\",\n    \"lineTwo\": \"lineTwo\"\n  }\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "2fd688d7-c3f1-47b5-b45e-fa4f96484043",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    },
+    {
+      "id": "8865bf5e-6c00-4951-8663-7870a4e303d0",
+      "name": "Get Satellite by ID - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites/{id}",
+        "method": "GET",
+        "pathParameters": {
+          "id": {
+            "equalTo": "id"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"createdDate\": \"2024-01-15T09:30:00Z\",\n  \"id\": \"id\",\n  \"lastModifiedDate\": \"2024-01-15T09:30:00Z\",\n  \"name\": \"name\",\n  \"tle\": {\n    \"lineOne\": \"lineOne\",\n    \"lineTwo\": \"lineTwo\"\n  }\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "8865bf5e-6c00-4951-8663-7870a4e303d0",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    },
+    {
+      "id": "4ccee456-efe4-47b6-b337-3142ab0e69c9",
+      "name": "Delete Satellite - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites/{id}",
+        "method": "DELETE",
+        "pathParameters": {
+          "id": {
+            "equalTo": "id"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "\"\"",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "4ccee456-efe4-47b6-b337-3142ab0e69c9",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    },
+    {
+      "id": "e2307d4b-ebcf-47f1-8495-d763b560f8d3",
+      "name": "Update Satellite - default",
+      "request": {
+        "urlPathTemplate": "/v1/satellites/{id}",
+        "method": "PATCH",
+        "pathParameters": {
+          "id": {
+            "equalTo": "id"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "{\n  \"createdDate\": \"2024-01-15T09:30:00Z\",\n  \"id\": \"id\",\n  \"lastModifiedDate\": \"2024-01-15T09:30:00Z\",\n  \"name\": \"name\",\n  \"tle\": {\n    \"lineOne\": \"lineOne\",\n    \"lineTwo\": \"lineTwo\"\n  }\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "uuid": "e2307d4b-ebcf-47f1-8495-d763b560f8d3",
+      "persistent": true,
+      "priority": 3,
+      "metadata": {
+        "mocklab": {
+          "created": {
+            "at": "2020-01-01T00:00:00.000Z",
+            "via": "SYSTEM"
+          }
+        }
+      }
+    }
+  ],
+  "meta": {
+    "total": 8
+  }
+}

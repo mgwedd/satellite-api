@@ -87,3 +87,21 @@ jobs:
           else
             echo "Notice: Base or Head OpenAPI spec file missing (initial setup or non-PR event). Skipping diff."
           fi
+
+  fern-check:
+    name: Fern Spec & SDK Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Fern CLI
+        run: npm install -g fern-api
+
+      - name: Run Fern Spec Check
+        run: fern check --warnings

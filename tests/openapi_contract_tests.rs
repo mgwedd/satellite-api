@@ -26,36 +26,36 @@ fn test_openapi_schema_static_contract() {
     // 3. Endpoint Paths Contract Verification
     let paths = &v["paths"];
     assert!(
-        paths["/v1/satellites"]["post"].is_object(),
-        "Missing POST /v1/satellites"
+        paths["/v1/satellites"]["post"]["operationId"].as_str() == Some("createSatellite"),
+        "Missing or invalid operationId for POST /v1/satellites"
     );
     assert!(
-        paths["/v1/satellites"]["get"].is_object(),
-        "Missing GET /v1/satellites"
+        paths["/v1/satellites"]["get"]["operationId"].as_str() == Some("listSatellites"),
+        "Missing or invalid operationId for GET /v1/satellites"
     );
     assert!(
-        paths["/v1/satellites/{id}"]["get"].is_object(),
-        "Missing GET /v1/satellites/{{id}}"
+        paths["/v1/satellites/{id}"]["get"]["operationId"].as_str() == Some("getSatellite"),
+        "Missing or invalid operationId for GET /v1/satellites/{{id}}"
     );
     assert!(
-        paths["/v1/satellites/{id}"]["patch"].is_object(),
-        "Missing PATCH /v1/satellites/{{id}}"
+        paths["/v1/satellites/{id}"]["patch"]["operationId"].as_str() == Some("updateSatellite"),
+        "Missing or invalid operationId for PATCH /v1/satellites/{{id}}"
     );
     assert!(
-        paths["/v1/satellites/{id}"]["delete"].is_object(),
-        "Missing DELETE /v1/satellites/{{id}}"
+        paths["/v1/satellites/{id}"]["delete"]["operationId"].as_str() == Some("deleteSatellite"),
+        "Missing or invalid operationId for DELETE /v1/satellites/{{id}}"
     );
     assert!(
-        paths["/v1/satellites/overhead"]["get"].is_object(),
-        "Missing GET /v1/satellites/overhead"
+        paths["/v1/astrodynamics/overhead"]["get"]["operationId"].as_str() == Some("getOverheadSatellite"),
+        "Missing or invalid operationId for GET /v1/astrodynamics/overhead"
     );
     assert!(
-        paths["/v1/satellites/{id}/next-visible"]["get"].is_object(),
-        "Missing GET /v1/satellites/{{id}}/next-visible"
+        paths["/v1/satellites/{id}/next-visible"]["get"]["operationId"].as_str() == Some("getNextVisiblePass"),
+        "Missing or invalid operationId for GET /v1/satellites/{{id}}/next-visible"
     );
     assert!(
-        paths["/v1/pipelines/sync"]["post"].is_object(),
-        "Missing POST /v1/pipelines/sync"
+        paths["/v1/pipelines/sync"]["post"]["operationId"].as_str() == Some("triggerPipelineSync"),
+        "Missing or invalid operationId for POST /v1/pipelines/sync"
     );
 
     // 4. Component Schemas Contract Verification
@@ -70,6 +70,7 @@ fn test_openapi_schema_static_contract() {
         "PipelineSyncResponse",
         "PaginationMeta",
         "PaginatedResponseSatellite",
+        "ErrorResponse",
     ];
     for schema_name in &required_schemas {
         assert!(
