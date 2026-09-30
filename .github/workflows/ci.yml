@@ -127,6 +127,8 @@ jobs:
           tar -czvf dist/satellite-api-sdk-typescript.tar.gz -C sdks/typescript .
           tar -czvf dist/satellite-api-sdk-python.tar.gz -C sdks/python .
           tar -czvf dist/satellite-api-sdk-go.tar.gz -C sdks/go .
+          tar -czvf dist/satellite-api-sdk-java.tar.gz -C sdks/java .
+          tar -czvf dist/satellite-api-sdk-rust.tar.gz -C sdks/rust .
 
       - name: Release SDK Archives to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/v')
@@ -136,4 +138,6 @@ jobs:
             dist/satellite-api-sdk-typescript.tar.gz
             dist/satellite-api-sdk-python.tar.gz
             dist/satellite-api-sdk-go.tar.gz
+            dist/satellite-api-sdk-java.tar.gz
+            dist/satellite-api-sdk-rust.tar.gz
           generate_release_notes: true

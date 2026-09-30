@@ -125,9 +125,9 @@ curl -X POST "http://localhost:3000/v1/pipelines/sync?group=stations" | jq
 
 ## 📦 Client SDKs
 
-Ergonomic SDKs for **TypeScript**, **Python**, and **Go** are generated automatically from the OpenAPI specification using [Fern](https://buildwithfern.com/).
+Ergonomic SDKs for **TypeScript**, **Python**, **Go**, **Java**, and **Rust** are generated automatically from the OpenAPI specification using [Fern](https://buildwithfern.com/).
 
-* **CI Release Assets**: Official SDK release packages (`satellite-api-sdk-typescript.tar.gz`, `satellite-api-sdk-python.tar.gz`, `satellite-api-sdk-go.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
+* **CI Release Assets**: Official SDK release packages (`satellite-api-sdk-typescript.tar.gz`, `satellite-api-sdk-python.tar.gz`, `satellite-api-sdk-go.tar.gz`, `satellite-api-sdk-java.tar.gz`, `satellite-api-sdk-rust.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
 * **Local SDK Generation**: To generate SDKs locally for testing:
   ```bash
   npm install -g fern-api
