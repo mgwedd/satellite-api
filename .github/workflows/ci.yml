@@ -110,7 +110,16 @@ jobs:
         run: fern check --warnings
 
       - name: Generate SDKs with Fern
-        run: fern generate
+        run: |
+          if [ -n "$FERN_TOKEN" ]; then
+            echo "Using FERN_TOKEN for cloud generation..."
+            fern generate
+          else
+            echo "FERN_TOKEN not set, running local containerized generation..."
+            fern generate --local
+          fi
+        env:
+          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
 
       - name: Package SDK Archives
         run: |
