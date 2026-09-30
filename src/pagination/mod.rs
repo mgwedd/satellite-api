@@ -1,9 +1,10 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 /// Query parameters for paginated endpoints
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct PaginationQuery {
     pub limit: Option<usize>,
     pub cursor: Option<String>,
@@ -19,7 +20,7 @@ impl PaginationQuery {
 }
 
 /// Opaque checkpoint cursor data structure
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct CheckpointCursor {
     pub last_id: Uuid,
     pub checkpoint_timestamp: i64,
@@ -51,7 +52,7 @@ impl CheckpointCursor {
 }
 
 /// Metadata envelope for paginated responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationMeta {
     pub next_cursor: Option<String>,
@@ -61,7 +62,8 @@ pub struct PaginationMeta {
 }
 
 /// Generic Paginated Response envelope
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[aliases(PaginatedResponseSatellite = PaginatedResponse<crate::models::Satellite>)]
 pub struct PaginatedResponse<T> {
     pub data: Vec<T>,
     pub pagination: PaginationMeta,

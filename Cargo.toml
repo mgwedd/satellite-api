@@ -22,6 +22,10 @@ thiserror = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 base64 = "0.21"
 
+# OpenAPI & Documentation toolchain
+utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
+
 # Tiered Cache & Storage dependencies
 moka = { version = "0.12", features = ["future"] }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }

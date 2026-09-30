@@ -1,16 +1,17 @@
 use crate::pagination::IdentifiableCheckpoint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Tle {
     pub line_one: String,
     pub line_two: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Satellite {
     pub id: Uuid,
@@ -30,7 +31,7 @@ impl IdentifiableCheckpoint for Satellite {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSatelliteDto {
     pub name: String,
@@ -40,7 +41,7 @@ pub struct CreateSatelliteDto {
     pub line_two: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSatelliteDto {
     pub name: Option<String>,
@@ -50,7 +51,7 @@ pub struct UpdateSatelliteDto {
     pub line_two: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct GroundPositionQuery {
     pub lat: f64,
     pub lon: f64,
@@ -58,14 +59,14 @@ pub struct GroundPositionQuery {
     pub time: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OverheadResponse {
     pub satellite: Satellite,
     pub elevation: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NextVisiblePassResponse {
     pub satellite_id: Uuid,

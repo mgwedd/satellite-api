@@ -14,6 +14,41 @@ use axum::{
 use repository::SatelliteRepository;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        handlers::satellite_handler::create_satellite,
+        handlers::satellite_handler::list_satellites,
+        handlers::satellite_handler::get_satellite,
+        handlers::satellite_handler::update_satellite,
+        handlers::satellite_handler::delete_satellite,
+        handlers::satellite_handler::trigger_pipeline_sync,
+        handlers::satellite_handler::get_overhead,
+        handlers::satellite_handler::get_next_visible,
+    ),
+    components(
+        schemas(
+            models::Satellite,
+            models::Tle,
+            models::CreateSatelliteDto,
+            models::UpdateSatelliteDto,
+            models::OverheadResponse,
+            models::NextVisiblePassResponse,
+            handlers::satellite_handler::PipelineSyncResponse,
+            pagination::PaginationMeta,
+            pagination::PaginatedResponseSatellite,
+        )
+    ),
+    tags(
+        (name = "Satellites", description = "Satellite management endpoints"),
+        (name = "Astrodynamics", description = "Orbital calculations and pass predictions"),
+        (name = "Pipelines", description = "CelesTrak automated discovery pipelines")
+    )
+)]
+pub struct ApiDoc;
 
 pub fn create_router(repo: SatelliteRepository) -> Router {
     let api_routes = Router::new()
@@ -36,6 +71,7 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .with_state(repo);
 
     Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest("/v1", api_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

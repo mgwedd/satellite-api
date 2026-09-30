@@ -91,3 +91,42 @@ async fn test_full_satellite_crud_and_overhead() {
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
+
+#[tokio::test]
+async fn test_openapi_and_swagger_ui_endpoints() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    // 1. Verify OpenAPI JSON endpoint
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api-docs/openapi.json")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let openapi_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    assert!(openapi_json["openapi"].as_str().unwrap().starts_with("3."));
+    assert!(openapi_json["paths"]["/v1/satellites"].is_object());
+    assert!(openapi_json["paths"]["/v1/satellites/{id}"].is_object());
+    assert!(openapi_json["paths"]["/v1/satellites/overhead"].is_object());
+    assert!(openapi_json["paths"]["/v1/pipelines/sync"].is_object());
+    assert!(openapi_json["components"]["schemas"]["Satellite"].is_object());
+    assert!(openapi_json["components"]["schemas"]["Tle"].is_object());
+
+    // 2. Verify Swagger UI endpoint
+    let req = Request::builder()
+        .method("GET")
+        .uri("/swagger-ui/")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert!(response.status().is_success() || response.status().is_redirection());
+}

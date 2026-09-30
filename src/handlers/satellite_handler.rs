@@ -15,7 +15,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
+use utoipa::{IntoParams, ToSchema};
+
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct OverheadQueryParams {
     pub lat: f64,
     pub lon: f64,
@@ -23,7 +25,7 @@ pub struct OverheadQueryParams {
     pub time: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct NextVisibleQueryParams {
     pub lat: f64,
     pub lon: f64,
@@ -31,18 +33,28 @@ pub struct NextVisibleQueryParams {
     pub threshold_deg: Option<f64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct PipelineSyncQueryParams {
     pub group: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PipelineSyncResponse {
     pub group: String,
     pub synced_count: usize,
     pub message: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/satellites",
+    request_body = CreateSatelliteDto,
+    responses(
+        (status = 201, description = "Satellite created successfully", body = Satellite),
+        (status = 400, description = "Invalid request payload")
+    ),
+    tag = "Satellites"
+)]
 pub async fn create_satellite(
     State(repo): State<SatelliteRepository>,
     Json(dto): Json<CreateSatelliteDto>,
@@ -51,6 +63,15 @@ pub async fn create_satellite(
     Ok((StatusCode::CREATED, Json(satellite)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/satellites",
+    params(PaginationQuery),
+    responses(
+        (status = 200, description = "Paginated list of satellites", body = PaginatedResponseSatellite)
+    ),
+    tag = "Satellites"
+)]
 pub async fn list_satellites(
     State(repo): State<SatelliteRepository>,
     Query(pagination): Query<PaginationQuery>,
@@ -59,6 +80,18 @@ pub async fn list_satellites(
     Ok(Json(paginated_res))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier")
+    ),
+    responses(
+        (status = 200, description = "Satellite found", body = Satellite),
+        (status = 404, description = "Satellite not found")
+    ),
+    tag = "Satellites"
+)]
 pub async fn get_satellite(
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
@@ -67,6 +100,19 @@ pub async fn get_satellite(
     Ok(Json(satellite))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/v1/satellites/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier")
+    ),
+    request_body = UpdateSatelliteDto,
+    responses(
+        (status = 200, description = "Satellite updated successfully", body = Satellite),
+        (status = 404, description = "Satellite not found")
+    ),
+    tag = "Satellites"
+)]
 pub async fn update_satellite(
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
@@ -76,6 +122,18 @@ pub async fn update_satellite(
     Ok(Json(satellite))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/v1/satellites/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier")
+    ),
+    responses(
+        (status = 204, description = "Satellite deleted successfully"),
+        (status = 404, description = "Satellite not found")
+    ),
+    tag = "Satellites"
+)]
 pub async fn delete_satellite(
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
@@ -85,6 +143,15 @@ pub async fn delete_satellite(
 }
 
 /// Triggers automated CelesTrak discovery pipeline sync for a specific satellite group
+#[utoipa::path(
+    post,
+    path = "/v1/pipelines/sync",
+    params(PipelineSyncQueryParams),
+    responses(
+        (status = 200, description = "Pipeline sync completed successfully", body = PipelineSyncResponse)
+    ),
+    tag = "Pipelines"
+)]
 pub async fn trigger_pipeline_sync(
     State(repo): State<SatelliteRepository>,
     Query(params): Query<PipelineSyncQueryParams>,
@@ -112,6 +179,16 @@ pub async fn trigger_pipeline_sync(
 }
 
 /// Computes the satellite closest to overhead (highest elevation) across all satellites in parallel using **Rayon** with **Tiered Cache**
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/overhead",
+    params(OverheadQueryParams),
+    responses(
+        (status = 200, description = "Overhead satellite computed successfully", body = OverheadResponse),
+        (status = 404, description = "No satellite overhead found")
+    ),
+    tag = "Astrodynamics"
+)]
 pub async fn get_overhead(
     State(repo): State<SatelliteRepository>,
     Query(params): Query<OverheadQueryParams>,
@@ -154,6 +231,19 @@ pub async fn get_overhead(
 }
 
 /// Calculates the next visible pass for a specific satellite above elevation threshold with **Tiered Cache**
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}/next-visible",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier"),
+        NextVisibleQueryParams
+    ),
+    responses(
+        (status = 200, description = "Next visible pass calculated successfully", body = NextVisiblePassResponse),
+        (status = 404, description = "Satellite not found")
+    ),
+    tag = "Astrodynamics"
+)]
 pub async fn get_next_visible(
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
