@@ -1,3 +1,4 @@
+use crate::pagination::IdentifiableCheckpoint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,6 +18,16 @@ pub struct Satellite {
     pub tle: Tle,
     pub created_date: DateTime<Utc>,
     pub last_modified_date: DateTime<Utc>,
+}
+
+impl IdentifiableCheckpoint for Satellite {
+    fn checkpoint_id(&self) -> Uuid {
+        self.id
+    }
+
+    fn checkpoint_timestamp(&self) -> i64 {
+        self.created_date.timestamp_millis()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::models::{
     CreateSatelliteDto, NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
 };
+use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
 use crate::services::astrodynamics;
 use crate::services::pipeline::{CelesTrakGroup, DiscoveryPipeline};
@@ -52,9 +53,10 @@ pub async fn create_satellite(
 
 pub async fn list_satellites(
     State(repo): State<SatelliteRepository>,
-) -> Result<Json<Vec<Satellite>>, AppError> {
-    let satellites = repo.list_satellites().await?;
-    Ok(Json(satellites))
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<Json<PaginatedResponse<Satellite>>, AppError> {
+    let paginated_res = repo.list_satellites_paginated(pagination).await?;
+    Ok(Json(paginated_res))
 }
 
 pub async fn get_satellite(

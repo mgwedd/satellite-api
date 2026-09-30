@@ -37,7 +37,7 @@ async fn test_full_satellite_crud_and_overhead() {
     assert_eq!(sat_json["name"], "ATLAS CENTAUR 2");
     assert_eq!(sat_json["tle"]["lineOne"], "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994");
 
-    // 2. Get list of satellites
+    // 2. Get paginated list of satellites
     let req = Request::builder()
         .method("GET")
         .uri("/v1/satellites")
@@ -51,7 +51,8 @@ async fn test_full_satellite_crud_and_overhead() {
         .await
         .unwrap();
     let list_json: Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert_eq!(list_json.as_array().unwrap().len(), 1);
+    assert_eq!(list_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(list_json["pagination"]["limit"], 20);
 
     // 3. Get satellite by ID
     let req = Request::builder()

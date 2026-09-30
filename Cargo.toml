@@ -20,6 +20,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 thiserror = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
+base64 = "0.21"
 
 # Tiered Cache & Storage dependencies
 moka = { version = "0.12", features = ["future"] }

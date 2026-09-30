@@ -1,6 +1,9 @@
 use crate::cache::TieredCache;
 use crate::error::AppError;
 use crate::models::{CreateSatelliteDto, Satellite, Tle, UpdateSatelliteDto};
+use crate::pagination::{
+    CheckpointCursor, IdentifiableCheckpoint, PaginatedResponse, PaginationMeta, PaginationQuery,
+};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -63,6 +66,70 @@ impl SatelliteRepository {
             })
             .await
             .map_err(AppError::InternalServerError)
+    }
+
+    pub async fn list_satellites_paginated(
+        &self,
+        query: PaginationQuery,
+    ) -> Result<PaginatedResponse<Satellite>, AppError> {
+        let limit = query.limit(20, 100);
+        let cursor_filter = match &query.cursor {
+            Some(c) => Some(
+                CheckpointCursor::decode(c)
+                    .map_err(|e| AppError::BadRequest(format!("Invalid pagination cursor: {}", e)))?,
+            ),
+            None => None,
+        };
+
+        let mut all_satellites = self.list_satellites().await?;
+
+        // Sort deterministically by (checkpoint_timestamp, checkpoint_id)
+        all_satellites.sort_by(|a, b| {
+            a.checkpoint_timestamp()
+                .cmp(&b.checkpoint_timestamp())
+                .then_with(|| a.checkpoint_id().cmp(&b.checkpoint_id()))
+        });
+
+        let total_count = all_satellites.len();
+
+        // Apply cursor checkpoint filter
+        let filtered: Vec<Satellite> = if let Some(cursor) = cursor_filter {
+            all_satellites
+                .into_iter()
+                .skip_while(|s| {
+                    let ts = s.checkpoint_timestamp();
+                    let id = s.checkpoint_id();
+                    ts < cursor.checkpoint_timestamp
+                        || (ts == cursor.checkpoint_timestamp && id <= cursor.last_id)
+                })
+                .collect()
+        } else {
+            all_satellites
+        };
+
+        let has_more = filtered.len() > limit;
+        let page_data: Vec<Satellite> = filtered.into_iter().take(limit).collect();
+
+        let next_cursor = if has_more && !page_data.is_empty() {
+            let last_item = page_data.last().unwrap();
+            let checkpoint = CheckpointCursor::new(
+                last_item.checkpoint_id(),
+                last_item.checkpoint_timestamp(),
+            );
+            checkpoint.encode().ok()
+        } else {
+            None
+        };
+
+        Ok(PaginatedResponse {
+            data: page_data,
+            pagination: PaginationMeta {
+                next_cursor,
+                has_more,
+                limit,
+                total_count,
+            },
+        })
     }
 
     pub async fn get_satellite_by_id(&self, id: Uuid) -> Result<Satellite, AppError> {

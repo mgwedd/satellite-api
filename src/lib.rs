@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod handlers;
 pub mod models;
+pub mod pagination;
 pub mod repository;
 pub mod services;
 
