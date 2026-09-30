@@ -346,6 +346,103 @@
         }
       }
     },
+    "/v1/satellites/{id}/groundtrack": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Get Satellite 3D Ground Track & Trajectory",
+        "description": "Computes 3D ECF coordinates, geodetic position, orbital period, footprint radius, and GeoJSON ground track line.",
+        "operationId": "getGroundTrack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "duration_minutes",
+            "in": "query",
+            "description": "Trajectory projection duration in minutes (default: 90 mins, max: 1440)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "step_seconds",
+            "in": "query",
+            "description": "Step sampling interval in seconds (default: 30 secs, max: 300)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Output format ('geojson' or 'json', default: 'geojson')",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "description": "UTC timestamp to start projection from (defaults to current time if omitted)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "3D Ground Track and GeoJSON trajectory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTrackResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal calculation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/satellites/{id}/next-visible": {
       "get": {
         "tags": [
@@ -468,6 +565,141 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "GeoJsonFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "geometry": {
+            "$ref": "#/components/schemas/GeoJsonGeometry"
+          },
+          "properties": {},
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "GeoJsonGeometry": {
+        "type": "object",
+        "required": [
+          "type",
+          "coordinates"
+        ],
+        "properties": {
+          "coordinates": {},
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "GroundTrackPoint": {
+        "type": "object",
+        "required": [
+          "timestamp",
+          "lat",
+          "lon",
+          "altKm",
+          "positionEcfKm",
+          "velocityEcfKms"
+        ],
+        "properties": {
+          "altKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "lat": {
+            "type": "number",
+            "format": "double"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double"
+          },
+          "positionEcfKm": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "velocityEcfKms": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        }
+      },
+      "GroundTrackResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "orbitalPeriodMinutes",
+          "footprintRadiusKm",
+          "durationMinutes",
+          "stepSeconds",
+          "trajectory"
+        ],
+        "properties": {
+          "czml": {
+            "nullable": true
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "footprintPolygon": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoJsonFeature"
+              }
+            ],
+            "nullable": true
+          },
+          "footprintRadiusKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "geojson": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoJsonFeature"
+              }
+            ],
+            "nullable": true
+          },
+          "orbitalPeriodMinutes": {
+            "type": "number",
+            "format": "double"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "stepSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "trajectory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroundTrackPoint"
+            }
           }
         }
       },

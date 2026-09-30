@@ -1,5 +1,8 @@
 use crate::error::AppError;
-use crate::models::{NextVisiblePassResponse, OverheadResponse, Satellite};
+use crate::models::{
+    GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint, GroundTrackResponse,
+    NextVisiblePassResponse, OverheadResponse, Satellite,
+};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
 use sgp4::{Constants, Elements, Prediction};
@@ -194,4 +197,312 @@ pub fn find_next_visible_pass(
     }
 
     Err(AppError::NotFound)
+}
+
+/// Converts ECF position [X, Y, Z] in km to WGS-84 Geodetic Latitude (deg), Longitude (deg), and Altitude (km)
+pub fn ecf_to_geodetic(ecf: [f64; 3]) -> (f64, f64, f64) {
+    let a = 6378.137; // WGS-84 equatorial radius in km
+    let f = 1.0 / 298.257223563;
+    let b = a * (1.0 - f);
+    let e2 = (a * a - b * b) / (a * a);
+    let ep2 = (a * a - b * b) / (b * b);
+
+    let x = ecf[0];
+    let y = ecf[1];
+    let z = ecf[2];
+    let p = (x * x + y * y).sqrt();
+
+    let lon = y.atan2(x).to_degrees();
+
+    if p < 1e-6 {
+        let lat = if z >= 0.0 { 90.0 } else { -90.0 };
+        let alt_km = z.abs() - b;
+        return (lat, lon, alt_km);
+    }
+
+    let theta = (z * a).atan2(p * b);
+    let lat_rad = (z + ep2 * b * theta.sin().powi(3)).atan2(p - e2 * a * theta.cos().powi(3));
+    let lat = lat_rad.to_degrees();
+
+    let n = a / (1.0 - e2 * lat_rad.sin().powi(2)).sqrt();
+    let alt_km = p / lat_rad.cos() - n;
+
+    (lat, lon, alt_km)
+}
+
+/// Converts ECI velocity vector to ECF velocity vector accounting for Earth rotation
+pub fn eci_to_ecf_velocity(eci_pos: [f64; 3], eci_vel: [f64; 3], lst_rad: f64) -> [f64; 3] {
+    let omega_e = 7.2921151467e-5; // Earth rotation angular velocity in rad/s
+    let vx_eff = eci_vel[0] + omega_e * eci_pos[1];
+    let vy_eff = eci_vel[1] - omega_e * eci_pos[0];
+    let vz_eff = eci_vel[2];
+
+    let vx_ecf = vx_eff * lst_rad.cos() + vy_eff * lst_rad.sin();
+    let vy_ecf = -vx_eff * lst_rad.sin() + vy_eff * lst_rad.cos();
+    let vz_ecf = vz_eff;
+
+    [vx_ecf, vy_ecf, vz_ecf]
+}
+
+/// Computes the sub-satellite footprint coverage circle radius on Earth in km
+pub fn calculate_footprint_radius(alt_km: f64) -> f64 {
+    let re = 6378.137;
+    let safe_alt = alt_km.max(0.0);
+    let cos_val = (re / (re + safe_alt)).clamp(-1.0, 1.0);
+    re * cos_val.acos()
+}
+
+/// Calculates 36 boundary ring coordinates forming a sub-satellite ground footprint circle on Earth
+pub fn generate_footprint_polygon_coords(
+    lat_deg: f64,
+    lon_deg: f64,
+    radius_km: f64,
+) -> Vec<Vec<[f64; 3]>> {
+    let re = 6378.137;
+    let ang_dist = radius_km / re;
+    let lat0 = lat_deg.to_radians();
+    let lon0 = lon_deg.to_radians();
+
+    let mut ring = Vec::with_capacity(37);
+    for step in 0..=36 {
+        let azimuth = (step as f64 * 10.0).to_radians();
+        let lat_rad =
+            (lat0.sin() * ang_dist.cos() + lat0.cos() * ang_dist.sin() * azimuth.cos()).asin();
+        let dlon = (azimuth.sin() * ang_dist.sin() * lat0.cos())
+            .atan2(ang_dist.cos() - lat0.sin() * lat_rad.sin());
+        let mut lon = (lon0 + dlon).to_degrees();
+
+        if lon > 180.0 {
+            lon -= 360.0;
+        } else if lon < -180.0 {
+            lon += 360.0;
+        }
+        let lat = lat_rad.to_degrees();
+
+        ring.push([lon, lat, 0.0]);
+    }
+
+    vec![ring]
+}
+
+/// Splits continuous coordinates across the ±180° Anti-Meridian line to prevent rendering streaks
+pub fn build_anti_meridian_geojson_geometry(points: &[[f64; 3]]) -> GeoJsonGeometry {
+    if points.is_empty() {
+        return GeoJsonGeometry {
+            r#type: "LineString".to_string(),
+            coordinates: serde_json::json!([]),
+        };
+    }
+
+    let mut segments: Vec<Vec<[f64; 3]>> = Vec::new();
+    let mut current_segment: Vec<[f64; 3]> = Vec::new();
+
+    for pt in points {
+        if let Some(last_pt) = current_segment.last() {
+            let lon_diff = (pt[0] - last_pt[0]).abs();
+            if lon_diff > 180.0 && !current_segment.is_empty() {
+                segments.push(current_segment);
+                current_segment = Vec::new();
+            }
+        }
+        current_segment.push(*pt);
+    }
+    if !current_segment.is_empty() {
+        segments.push(current_segment);
+    }
+
+    if segments.len() == 1 {
+        GeoJsonGeometry {
+            r#type: "LineString".to_string(),
+            coordinates: serde_json::json!(segments[0]),
+        }
+    } else {
+        GeoJsonGeometry {
+            r#type: "MultiLineString".to_string(),
+            coordinates: serde_json::json!(segments),
+        }
+    }
+}
+
+/// Generates a valid CZML Document for Cesium.js 3D globe animation
+pub fn generate_czml_document(
+    satellite: &Satellite,
+    trajectory: &[GroundTrackPoint],
+    step_seconds: usize,
+) -> serde_json::Value {
+    if trajectory.is_empty() {
+        return serde_json::json!([]);
+    }
+
+    let start_iso = trajectory[0].timestamp.to_rfc3339();
+    let end_iso = trajectory[trajectory.len() - 1].timestamp.to_rfc3339();
+    let availability = format!("{}/{}", start_iso, end_iso);
+
+    let mut cartesian_coords = Vec::with_capacity(trajectory.len() * 4);
+    for (idx, pt) in trajectory.iter().enumerate() {
+        let time_offset = (idx * step_seconds) as f64;
+        cartesian_coords.push(serde_json::json!(time_offset));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[0] * 1000.0));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[1] * 1000.0));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[2] * 1000.0));
+    }
+
+    serde_json::json!([
+        {
+            "id": "document",
+            "name": format!("Trajectory for {}", satellite.name),
+            "version": "1.0"
+        },
+        {
+            "id": satellite.id.to_string(),
+            "name": satellite.name,
+            "availability": availability,
+            "position": {
+                "epoch": start_iso,
+                "cartesian": cartesian_coords
+            },
+            "path": {
+                "show": true,
+                "width": 2,
+                "resolution": 120,
+                "material": {
+                    "solidColor": {
+                        "color": {
+                            "rgba": [0, 255, 255, 255]
+                        }
+                    }
+                }
+            }
+        }
+    ])
+}
+
+/// Generates a full orbital 3D ground track trajectory, GeoJSON Anti-Meridian line, Footprint Polygon, and CZML
+pub fn generate_ground_track(
+    satellite: &Satellite,
+    start_time: DateTime<Utc>,
+    duration_minutes: usize,
+    step_seconds: usize,
+    include_geojson: bool,
+    include_czml: bool,
+) -> Result<GroundTrackResponse, AppError> {
+    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
+    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+
+    let elements = Elements::from_tle(
+        Some(satellite.name.clone()),
+        line1.as_bytes(),
+        line2.as_bytes(),
+    )
+    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
+
+    let constants = Constants::from_elements(&elements)
+        .map_err(|e| AppError::Sgp4Error(format!("Constants error: {:?}", e)))?;
+
+    let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
+    let mean_motion_revs_day = elements.mean_motion;
+    let orbital_period_minutes = if mean_motion_revs_day > 0.0 {
+        1440.0 / mean_motion_revs_day
+    } else {
+        90.0
+    };
+
+    let duration_mins = duration_minutes.clamp(1, 1440);
+    let step_secs = step_seconds.clamp(1, 300);
+    let total_steps = (duration_mins * 60) / step_secs;
+    let mut trajectory = Vec::with_capacity(total_steps + 1);
+    let mut geojson_coords = Vec::with_capacity(if include_geojson { total_steps + 1 } else { 0 });
+    let mut sum_alt = 0.0;
+
+    for i in 0..=total_steps {
+        let offset_secs = (i * step_secs) as i64;
+        let current_time = start_time + chrono::Duration::seconds(offset_secs);
+        let minutes_since_epoch = (current_time - epoch_dt).num_milliseconds() as f64 / 60000.0;
+
+        if let Ok(prediction) = constants.propagate(minutes_since_epoch) {
+            let lst = calculate_local_sidereal_time(current_time, 0.0);
+            let pos_ecf = eci_to_ecf(prediction.position, lst);
+            let vel_ecf = eci_to_ecf_velocity(prediction.position, prediction.velocity, lst);
+            let (lat, lon, alt_km) = ecf_to_geodetic(pos_ecf);
+
+            sum_alt += alt_km;
+            trajectory.push(GroundTrackPoint {
+                timestamp: current_time,
+                lat,
+                lon,
+                alt_km,
+                position_ecf_km: pos_ecf,
+                velocity_ecf_kms: vel_ecf,
+            });
+
+            if include_geojson {
+                geojson_coords.push([lon, lat, alt_km]);
+            }
+        }
+    }
+
+    let avg_alt_km = if !trajectory.is_empty() {
+        sum_alt / trajectory.len() as f64
+    } else {
+        400.0
+    };
+    let footprint_radius_km = calculate_footprint_radius(avg_alt_km);
+
+    let (geojson, footprint_polygon) = if include_geojson {
+        let geometry = build_anti_meridian_geojson_geometry(&geojson_coords);
+        let feature = GeoJsonFeature {
+            r#type: "Feature".to_string(),
+            geometry,
+            properties: serde_json::json!({
+                "satelliteId": satellite.id,
+                "satelliteName": satellite.name,
+                "periodMinutes": orbital_period_minutes,
+                "footprintRadiusKm": footprint_radius_km,
+            }),
+        };
+
+        let footprint_poly = if let Some(first_pt) = trajectory.first() {
+            let poly_ring =
+                generate_footprint_polygon_coords(first_pt.lat, first_pt.lon, footprint_radius_km);
+            Some(GeoJsonFeature {
+                r#type: "Feature".to_string(),
+                geometry: GeoJsonGeometry {
+                    r#type: "Polygon".to_string(),
+                    coordinates: serde_json::json!(poly_ring),
+                },
+                properties: serde_json::json!({
+                    "satelliteId": satellite.id,
+                    "satelliteName": satellite.name,
+                    "footprintRadiusKm": footprint_radius_km,
+                    "centerLat": first_pt.lat,
+                    "centerLon": first_pt.lon,
+                }),
+            })
+        } else {
+            None
+        };
+
+        (Some(feature), footprint_poly)
+    } else {
+        (None, None)
+    };
+
+    let czml = if include_czml {
+        Some(generate_czml_document(satellite, &trajectory, step_secs))
+    } else {
+        None
+    };
+
+    Ok(GroundTrackResponse {
+        satellite_id: satellite.id,
+        satellite_name: satellite.name.clone(),
+        orbital_period_minutes,
+        footprint_radius_km,
+        duration_minutes: duration_mins,
+        step_seconds: step_secs,
+        trajectory,
+        geojson,
+        footprint_polygon,
+        czml,
+    })
 }

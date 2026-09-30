@@ -28,6 +28,7 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::satellite_handler::trigger_pipeline_sync,
         handlers::satellite_handler::get_overhead,
         handlers::satellite_handler::get_next_visible,
+        handlers::satellite_handler::get_ground_track,
     ),
     components(
         schemas(
@@ -37,6 +38,10 @@ use utoipa_swagger_ui::SwaggerUi;
             models::UpdateSatelliteDto,
             models::OverheadResponse,
             models::NextVisiblePassResponse,
+            models::GroundTrackResponse,
+            models::GroundTrackPoint,
+            models::GeoJsonFeature,
+            models::GeoJsonGeometry,
             handlers::satellite_handler::PipelineSyncResponse,
             pagination::PaginationMeta,
             pagination::PaginatedResponseSatellite,
@@ -67,6 +72,10 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .route(
             "/satellites/:id/next-visible",
             get(handlers::get_next_visible),
+        )
+        .route(
+            "/satellites/:id/groundtrack",
+            get(handlers::get_ground_track),
         )
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);
