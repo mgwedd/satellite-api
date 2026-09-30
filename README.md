@@ -1,23 +1,160 @@
-# Satellite API
+# 🛰️ Satellite API
 
-This API enables you to determine when a given orbital satellite will likely be reachable from a ground station.
+High-performance, low-latency Rust API for orbital satellite tracking, SGP4 propagation, ground station visibility predictions, and CelesTrak TLE dataset synchronization.
 
-The API is deployed and available on the internet at [this URL](https://whispering-mountain-80644.herokuapp.com/)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
+[![Axum](https://img.shields.io/badge/Axum-0.7-blue.svg)](https://github.com/tokio-rs/axum)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-green.svg)](http://localhost:3000/swagger-ui)
+[![Fern SDKs](https://img.shields.io/badge/Fern-SDKs-purple.svg)](https://buildwithfern.com/)
+[![License](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE.MD)
 
-## Set up
+---
 
-1. Clone the server to your local machine
-2. Run `yarn install`
-3. Run `yarn start` (production mode) or `yarn run dev` (dev mode)
+## 🚀 Key Features
 
-## Scripts
+* ⚡ **Sub-Millisecond Orbital Propagation**: Built with **Axum 0.7**, **Tokio**, and **SGP4** astrodynamics libraries with parallel Rayon multi-threading.
+* 📍 **Ground Station Pass Prediction**: Calculate real-time satellite positions, overhead passes, and next-visible window calculations given observer latitude, longitude, and elevation threshold.
+* 🏎️ **Tiered In-Memory & Distributed Caching**: Ultra-fast response times via an **L1 Moka in-memory cache** paired with an **L2 Redis cache**.
+* 🔄 **Automated CelesTrak Sync Pipeline**: Background discovery worker syncing TLE data sets (e.g. `stations`, `starlink`, `weather`, `visual`) every 6 hours with on-demand trigger endpoints.
+* 📑 **Checkpoint Cursor Pagination**: Deterministic, opaque base64 checkpoint tokens for high-throughput pagination without missing or duplicated items during active ingest.
+* 📚 **Interactive Swagger UI & OpenAPI Specification**: Auto-generated schema contract hosted at `/swagger-ui` and exposed via OpenAPI 3.0 at `/api-docs/openapi.json`.
+* 🛠️ **Fern-Generated SDKs**: Ergonomic, production-ready SDKs for **TypeScript**, **Python**, and **Go** located in [`sdks/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks).
+* 🛡️ **CI Gate & Contract Verification**: Automated GitHub Actions workflow enforcing `cargo test`, `cargo fmt`, Docker container build verification, and `pb33f/openapi-changes` schema contract checks.
 
-Run the server: `yarn start`
+---
 
-Run the server in dev mode: `yarn run dev`
+## ⚡ Quickstart
 
-Run tests: `yarn test` or `yarn run test:watch` to run the tests while you're developing
+### Prerequisites
+* [Rust](https://www.rust-lang.org/tools/install) (1.80+)
+* (Optional) [Docker](https://www.docker.com/) for container deployment
+* (Optional) [Redis](https://redis.io/) for L2 distributed cache (`REDIS_URL=redis://127.0.0.1:6379`)
 
-## Deploying
+---
 
-Run: `git push heroku master`
+### Running Locally
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/mgwedd/satellite-api.git
+   cd satellite-api
+   ```
+
+2. **Run the API server**:
+   ```bash
+   cargo run
+   ```
+   The server will start at **`http://localhost:3000`**.
+
+3. **Explore Interactive Documentation**:
+   Open **[http://localhost:3000/swagger-ui](http://localhost:3000/swagger-ui)** in your browser to test endpoints directly.
+
+---
+
+### Running with Docker
+
+Build and launch the lightweight Alpine-based container:
+
+```bash
+# Build the Docker image
+docker build -t satellite-api .
+
+# Run the container
+docker run -p 3000:3000 satellite-api
+```
+
+---
+
+## ⚙️ Configuration
+
+Set environment variables to customize runtime behavior:
+
+| Environment Variable | Default | Description |
+| :--- | :--- | :--- |
+| `HOST` | `0.0.0.0` | Bind host address |
+| `PORT` | `3000` | Listening HTTP port |
+| `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
+| `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
+
+---
+
+## 🛰️ Core API Endpoints
+
+All endpoints are versioned under `/v1`.
+
+| HTTP Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/v1/satellites` | List satellites with checkpoint cursor pagination (`limit`, `cursor`) |
+| `POST` | `/v1/satellites` | Create satellite record with TLE data |
+| `GET` | `/v1/satellites/:id` | Fetch satellite details by UUID |
+| `PATCH` | `/v1/satellites/:id` | Update satellite metadata or TLE elements |
+| `DELETE` | `/v1/satellites/:id` | Delete satellite record |
+| `GET` | `/v1/astrodynamics/overhead` | Find all satellites currently above observer elevation threshold |
+| `GET` | `/v1/satellites/:id/next-visible` | Compute next visible ground pass for a specific satellite |
+| `POST` | `/v1/pipelines/sync` | Trigger CelesTrak TLE dataset sync (group: `stations`, `visual`, `starlink`, etc.) |
+| `GET` | `/swagger-ui` | Interactive Swagger UI API documentation |
+| `GET` | `/api-docs/openapi.json` | OpenAPI 3.0 JSON Specification |
+
+---
+
+## 🧪 Usage Examples
+
+### 1. List Satellites (Paginated)
+```bash
+curl -s "http://localhost:3000/v1/satellites?limit=5" | jq
+```
+
+### 2. Find Overhead Satellites for Observer Location
+Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
+```bash
+curl -s "http://localhost:3000/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+```
+
+### 3. Compute Next Visible Pass for Satellite
+```bash
+curl -s "http://localhost:3000/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
+```
+
+### 4. Trigger Manual CelesTrak Sync
+Sync space station TLE data:
+```bash
+curl -X POST "http://localhost:3000/v1/pipelines/sync?group=stations" | jq
+```
+
+---
+
+## 📦 Client SDKs
+
+Pre-built ergonomic SDKs generated via [Fern](https://buildwithfern.com/) are available in the repository:
+
+* **TypeScript**: [`sdks/typescript/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/typescript)
+* **Python**: [`sdks/python/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/python)
+* **Go**: [`sdks/go/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/go)
+
+To re-generate SDKs from updated OpenAPI spec:
+```bash
+fern generate
+```
+
+---
+
+## 🧪 Testing & Verification
+
+Run the comprehensive test suite (unit tests, integration tests, contract tests, cache tests):
+
+```bash
+# Run all tests
+cargo test --offline
+
+# Verify code formatting
+cargo fmt --check
+
+# Test OpenAPI contract stability
+cargo test --test openapi_contract_tests
+```
+
+---
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE.MD).
