@@ -322,7 +322,7 @@ pub async fn get_next_visible(
             pass_res.map_err(|e| e.to_string())
         })
         .await
-        .map_err(|e| AppError::InternalServerError(e))?;
+        .map_err(AppError::InternalServerError)?;
 
     Ok(Json(res))
 }
