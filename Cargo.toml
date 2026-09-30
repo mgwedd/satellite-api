@@ -1,0 +1,31 @@
+[package]
+name = "satellite-api"
+version = "0.1.0"
+edition = "2021"
+authors = ["Michael Wedd"]
+description = "A high-performance Rust API for satellite tracking, SGP4 propagation, and visibility prediction"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1.35", features = ["full"] }
+rayon = "1.8"
+sgp4 = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+thiserror = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Tiered Cache & Storage dependencies
+moka = { version = "0.12", features = ["future"] }
+redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
+
+[features]
+default = []
+postgres = ["dep:sqlx"]

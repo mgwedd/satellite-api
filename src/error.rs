@@ -1,0 +1,42 @@
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::json;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Satellite not found")]
+    NotFound,
+
+    #[error("Invalid request input: {0}")]
+    BadRequest(String),
+
+    #[error("SGP4 calculation error: {0}")]
+    Sgp4Error(String),
+
+    #[error("Internal server error: {0}")]
+    InternalServerError(String),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match &self {
+            AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
+            AppError::BadRequest(ref msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::Sgp4Error(ref msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
+            AppError::InternalServerError(ref msg) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+            }
+        };
+
+        let body = Json(json!({
+            "error": error_message,
+            "status": status.as_u16(),
+        }));
+
+        (status, body).into_response()
+    }
+}

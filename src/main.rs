@@ -1,0 +1,42 @@
+use satellite_api::{
+    config::Config,
+    create_router,
+    repository::SatelliteRepository,
+    services::pipeline::DiscoveryPipeline,
+};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "satellite_api=info,tower_http=info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let config = Config::from_env();
+    let redis_url = std::env::var("REDIS_URL").ok();
+    let repo = SatelliteRepository::new(redis_url.as_deref()).await;
+
+    // Start background CelesTrak discovery pipeline (syncs every 6 hours)
+    let enable_pipeline = std::env::var("ENABLE_DISCOVERY_PIPELINE")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(true);
+
+    if enable_pipeline {
+        tracing::info!("🚀 Starting automated CelesTrak discovery pipeline background worker (6-hour refresh)");
+        DiscoveryPipeline::start_background_sync(repo.clone(), 6);
+    }
+
+    let app = create_router(repo);
+
+    let addr = config.socket_addr();
+    tracing::info!("🛰️ Satellite API listening on http://{}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
