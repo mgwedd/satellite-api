@@ -55,3 +55,35 @@ jobs:
           tags: satellite-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  openapi-breaking-change-check:
+    name: OpenAPI Breaking Change Gate (pb33f/openapi-changes)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Head Branch
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: Checkout Base Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref || github.event.repository.default_branch }}
+          path: base
+
+      - name: Setup Go Toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.21'
+
+      - name: Install pb33f/openapi-changes CLI
+        run: go install github.com/pb33f/openapi-changes@latest
+
+      - name: Detect OpenAPI Contract Breaking Changes
+        run: |
+          echo "Comparing base OpenAPI spec against head OpenAPI spec..."
+          if [ -f base/api-docs/openapi.json ] && [ -f head/api-docs/openapi.json ]; then
+            $(go env GOPATH)/bin/openapi-changes summary --markdown base/api-docs/openapi.json head/api-docs/openapi.json
+          else
+            echo "Notice: Base or Head OpenAPI spec file missing (initial setup or non-PR event). Skipping diff."
+          fi

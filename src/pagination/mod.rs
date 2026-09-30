@@ -61,9 +61,11 @@ pub struct PaginationMeta {
     pub total_count: usize,
 }
 
+use crate::models::Satellite;
+
 /// Generic Paginated Response envelope
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[aliases(PaginatedResponseSatellite = PaginatedResponse<crate::models::Satellite>)]
+#[aliases(PaginatedResponseSatellite = PaginatedResponse<Satellite>)]
 pub struct PaginatedResponse<T> {
     pub data: Vec<T>,
     pub pagination: PaginationMeta,

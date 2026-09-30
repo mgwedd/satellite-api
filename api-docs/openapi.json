@@ -1,0 +1,578 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "satellite-api",
+    "description": "A high-performance Rust API for satellite tracking, SGP4 propagation, and visibility prediction",
+    "contact": {
+      "name": "Michael Wedd"
+    },
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/pipelines/sync": {
+      "post": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Triggers automated CelesTrak discovery pipeline sync for a specific satellite group",
+        "operationId": "trigger_pipeline_sync",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline sync completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineSyncResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/satellites": {
+      "get": {
+        "tags": [
+          "Satellites"
+        ],
+        "operationId": "list_satellites",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of satellites",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseSatellite"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Satellites"
+        ],
+        "operationId": "create_satellite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSatelliteDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Satellite created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Satellite"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload"
+          }
+        }
+      }
+    },
+    "/v1/satellites/overhead": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Computes the satellite closest to overhead (highest elevation) across all satellites in parallel using **Rayon** with **Tiered Cache**",
+        "operationId": "get_overhead",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overhead satellite computed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverheadResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No satellite overhead found"
+          }
+        }
+      }
+    },
+    "/v1/satellites/{id}": {
+      "get": {
+        "tags": [
+          "Satellites"
+        ],
+        "operationId": "get_satellite",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Satellite found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Satellite"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Satellites"
+        ],
+        "operationId": "delete_satellite",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Satellite deleted successfully"
+          },
+          "404": {
+            "description": "Satellite not found"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Satellites"
+        ],
+        "operationId": "update_satellite",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSatelliteDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Satellite updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Satellite"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found"
+          }
+        }
+      }
+    },
+    "/v1/satellites/{id}/next-visible": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Calculates the next visible pass for a specific satellite above elevation threshold with **Tiered Cache**",
+        "operationId": "get_next_visible",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "threshold_deg",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Next visible pass calculated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextVisiblePassResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateSatelliteDto": {
+        "type": "object",
+        "required": [
+          "name",
+          "lineOne",
+          "lineTwo"
+        ],
+        "properties": {
+          "lineOne": {
+            "type": "string"
+          },
+          "lineTwo": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "NextVisiblePassResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "passTime",
+          "elevationDeg",
+          "azimuthDeg",
+          "rangeKm"
+        ],
+        "properties": {
+          "azimuthDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "elevationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "passTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rangeKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          }
+        }
+      },
+      "OverheadResponse": {
+        "type": "object",
+        "required": [
+          "satellite",
+          "elevation"
+        ],
+        "properties": {
+          "elevation": {
+            "type": "number",
+            "format": "double"
+          },
+          "satellite": {
+            "$ref": "#/components/schemas/Satellite"
+          }
+        }
+      },
+      "PaginatedResponseSatellite": {
+        "type": "object",
+        "description": "Generic Paginated Response envelope",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Satellite"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "description": "Metadata envelope for paginated responses",
+        "required": [
+          "hasMore",
+          "limit",
+          "totalCount"
+        ],
+        "properties": {
+          "hasMore": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PipelineSyncResponse": {
+        "type": "object",
+        "required": [
+          "group",
+          "synced_count",
+          "message"
+        ],
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "synced_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Satellite": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "tle",
+          "createdDate",
+          "lastModifiedDate"
+        ],
+        "properties": {
+          "createdDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lastModifiedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tle": {
+            "$ref": "#/components/schemas/Tle"
+          }
+        }
+      },
+      "Tle": {
+        "type": "object",
+        "required": [
+          "lineOne",
+          "lineTwo"
+        ],
+        "properties": {
+          "lineOne": {
+            "type": "string"
+          },
+          "lineTwo": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateSatelliteDto": {
+        "type": "object",
+        "properties": {
+          "lineOne": {
+            "type": "string",
+            "nullable": true
+          },
+          "lineTwo": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Satellites",
+      "description": "Satellite management endpoints"
+    },
+    {
+      "name": "Astrodynamics",
+      "description": "Orbital calculations and pass predictions"
+    },
+    {
+      "name": "Pipelines",
+      "description": "CelesTrak automated discovery pipelines"
+    }
+  ]
+}
