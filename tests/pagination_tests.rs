@@ -1,7 +1,5 @@
 use satellite_api::{
-    models::CreateSatelliteDto,
-    pagination::PaginationQuery,
-    repository::SatelliteRepository,
+    models::CreateSatelliteDto, pagination::PaginationQuery, repository::SatelliteRepository,
 };
 
 #[tokio::test]
@@ -12,8 +10,14 @@ async fn test_checkpoint_cursor_pagination_flow() {
     for i in 1..=5 {
         let dto = CreateSatelliteDto {
             name: format!("SATELLITE {}", i),
-            line_one: format!("1 0000{}U 21000A   21239.50000000  .00000000  00000-0  00000-0 0  9991", i),
-            line_two: format!("2 0000{}  51.0000 100.0000 0001000 100.0000 200.0000 15.0000000000001", i),
+            line_one: format!(
+                "1 0000{}U 21000A   21239.50000000  .00000000  00000-0  00000-0 0  9991",
+                i
+            ),
+            line_two: format!(
+                "2 0000{}  51.0000 100.0000 0001000 100.0000 200.0000 15.0000000000001",
+                i
+            ),
         };
         repo.create_satellite(dto).await.unwrap();
     }

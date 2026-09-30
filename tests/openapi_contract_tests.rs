@@ -46,11 +46,13 @@ fn test_openapi_schema_static_contract() {
         "Missing or invalid operationId for DELETE /v1/satellites/{{id}}"
     );
     assert!(
-        paths["/v1/astrodynamics/overhead"]["get"]["operationId"].as_str() == Some("getOverheadSatellite"),
+        paths["/v1/astrodynamics/overhead"]["get"]["operationId"].as_str()
+            == Some("getOverheadSatellite"),
         "Missing or invalid operationId for GET /v1/astrodynamics/overhead"
     );
     assert!(
-        paths["/v1/satellites/{id}/next-visible"]["get"]["operationId"].as_str() == Some("getNextVisiblePass"),
+        paths["/v1/satellites/{id}/next-visible"]["get"]["operationId"].as_str()
+            == Some("getNextVisiblePass"),
         "Missing or invalid operationId for GET /v1/satellites/{{id}}/next-visible"
     );
     assert!(

@@ -12,10 +12,7 @@ pub struct PaginationQuery {
 
 impl PaginationQuery {
     pub fn limit(&self, default_limit: usize, max_limit: usize) -> usize {
-        self.limit
-            .unwrap_or(default_limit)
-            .min(max_limit)
-            .max(1)
+        self.limit.unwrap_or(default_limit).min(max_limit).max(1)
     }
 }
 

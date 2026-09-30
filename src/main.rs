@@ -1,7 +1,5 @@
 use satellite_api::{
-    config::Config,
-    create_router,
-    repository::SatelliteRepository,
+    config::Config, create_router, repository::SatelliteRepository,
     services::pipeline::DiscoveryPipeline,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -26,7 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(true);
 
     if enable_pipeline {
-        tracing::info!("🚀 Starting automated CelesTrak discovery pipeline background worker (6-hour refresh)");
+        tracing::info!(
+            "🚀 Starting automated CelesTrak discovery pipeline background worker (6-hour refresh)"
+        );
         DiscoveryPipeline::start_background_sync(repo.clone(), 6);
     }
 

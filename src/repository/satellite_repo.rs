@@ -73,13 +73,13 @@ impl SatelliteRepository {
         query: PaginationQuery,
     ) -> Result<PaginatedResponse<Satellite>, AppError> {
         let limit = query.limit(20, 100);
-        let cursor_filter = match &query.cursor {
-            Some(c) => Some(
-                CheckpointCursor::decode(c)
-                    .map_err(|e| AppError::BadRequest(format!("Invalid pagination cursor: {}", e)))?,
-            ),
-            None => None,
-        };
+        let cursor_filter =
+            match &query.cursor {
+                Some(c) => Some(CheckpointCursor::decode(c).map_err(|e| {
+                    AppError::BadRequest(format!("Invalid pagination cursor: {}", e))
+                })?),
+                None => None,
+            };
 
         let mut all_satellites = self.list_satellites().await?;
 
@@ -112,10 +112,8 @@ impl SatelliteRepository {
 
         let next_cursor = if has_more && !page_data.is_empty() {
             let last_item = page_data.last().unwrap();
-            let checkpoint = CheckpointCursor::new(
-                last_item.checkpoint_id(),
-                last_item.checkpoint_timestamp(),
-            );
+            let checkpoint =
+                CheckpointCursor::new(last_item.checkpoint_id(), last_item.checkpoint_timestamp());
             checkpoint.encode().ok()
         } else {
             None

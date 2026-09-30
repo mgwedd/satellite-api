@@ -51,7 +51,10 @@ impl DiscoveryPipeline {
             .map_err(|e| format!("HTTP request failed: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("CelesTrak API returned status {}", response.status()));
+            return Err(format!(
+                "CelesTrak API returned status {}",
+                response.status()
+            ));
         }
 
         let body_text = response
@@ -121,7 +124,11 @@ impl DiscoveryPipeline {
             }
         }
 
-        info!("Successfully synced {} satellites for group {}", total, group.as_str());
+        info!(
+            "Successfully synced {} satellites for group {}",
+            total,
+            group.as_str()
+        );
         Ok(total)
     }
 

@@ -1,8 +1,8 @@
 # Stage 1: Build stage using Rust official image
-FROM rust:1.80-alpine as builder
+FROM rust:alpine AS builder
 
 WORKDIR /usr/src/satellite-api
-RUN apk add --no-crate-build-pkg build-base musl-dev pkgconfig openssl-dev
+RUN apk add --no-cache build-base musl-dev pkgconfig openssl-dev openssl-libs-static curl
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src

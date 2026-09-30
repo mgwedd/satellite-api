@@ -89,8 +89,7 @@ pub fn ecf_to_look_angles(
     let rz = sat_ecf[2] - obs_z;
 
     // Rotate ECF vector to Topocentric Horizon frame (South, East, Up)
-    let top_s = lat_rad.sin() * lon_rad.cos() * rx
-        + lat_rad.sin() * lon_rad.sin() * ry
+    let top_s = lat_rad.sin() * lon_rad.cos() * rx + lat_rad.sin() * lon_rad.sin() * ry
         - lat_rad.cos() * rz;
     let top_e = -lon_rad.sin() * rx + lon_rad.cos() * ry;
     let top_u = lat_rad.cos() * lon_rad.cos() * rx

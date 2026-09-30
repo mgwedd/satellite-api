@@ -64,8 +64,7 @@ impl TieredCache {
 
         // 2. Check L2 Redis Cache (if configured)
         if let Some(mut redis_conn) = self.l2_redis.clone() {
-            let redis_res: Result<Option<String>, redis::RedisError> =
-                redis_conn.get(key).await;
+            let redis_res: Result<Option<String>, redis::RedisError> = redis_conn.get(key).await;
             if let Ok(Some(cached_json)) = redis_res {
                 if let Ok(val) = serde_json::from_str::<T>(&cached_json) {
                     debug!("L2 Redis Cache HIT for key: {}", key);
@@ -82,7 +81,9 @@ impl TieredCache {
         let json_str = serde_json::to_string(&val).map_err(|e| e.to_string())?;
 
         // Populate L1 Memory Cache
-        self.l1_cache.insert(key.to_string(), json_str.clone()).await;
+        self.l1_cache
+            .insert(key.to_string(), json_str.clone())
+            .await;
 
         // Populate L2 Redis Cache (async fire-and-forget)
         if let Some(mut redis_conn) = self.l2_redis.clone() {

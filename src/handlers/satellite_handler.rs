@@ -207,7 +207,10 @@ pub async fn trigger_pipeline_sync(
     Ok(Json(PipelineSyncResponse {
         group: group_name.clone(),
         synced_count,
-        message: format!("Successfully synced {} satellites for group '{}'", synced_count, group_name),
+        message: format!(
+            "Successfully synced {} satellites for group '{}'",
+            synced_count, group_name
+        ),
     }))
 }
 
@@ -247,7 +250,13 @@ pub async fn get_overhead(
         .cache
         .get_or_insert_with(&cache_key, || async move {
             let overhead_res = tokio::task::spawn_blocking(move || {
-                astrodynamics::find_overhead_satellite(&satellites, params.lat, params.lon, alt, time)
+                astrodynamics::find_overhead_satellite(
+                    &satellites,
+                    params.lat,
+                    params.lon,
+                    alt,
+                    time,
+                )
             })
             .await
             .map_err(|e| e.to_string())?;
@@ -304,13 +313,7 @@ pub async fn get_next_visible(
         .get_or_insert_with(&cache_key, || async move {
             let pass_res = tokio::task::spawn_blocking(move || {
                 astrodynamics::find_next_visible_pass(
-                    &satellite,
-                    params.lat,
-                    params.lon,
-                    alt,
-                    start_time,
-                    threshold,
-                    1440,
+                    &satellite, params.lat, params.lon, alt, start_time, threshold, 1440,
                 )
             })
             .await

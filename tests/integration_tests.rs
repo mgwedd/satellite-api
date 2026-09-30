@@ -2,9 +2,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use satellite_api::{create_router, repository::SatelliteRepository};
 use serde_json::{json, Value};
 use tower::ServiceExt; // for `oneshot`
-use satellite_api::{create_router, repository::SatelliteRepository};
 
 #[tokio::test]
 async fn test_full_satellite_crud_and_overhead() {
@@ -35,7 +35,10 @@ async fn test_full_satellite_crud_and_overhead() {
     let sat_id = sat_json["id"].as_str().unwrap().to_string();
 
     assert_eq!(sat_json["name"], "ATLAS CENTAUR 2");
-    assert_eq!(sat_json["tle"]["lineOne"], "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994");
+    assert_eq!(
+        sat_json["tle"]["lineOne"],
+        "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994"
+    );
 
     // 2. Get paginated list of satellites
     let req = Request::builder()

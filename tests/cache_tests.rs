@@ -1,7 +1,4 @@
-use satellite_api::{
-    models::CreateSatelliteDto,
-    repository::SatelliteRepository,
-};
+use satellite_api::{models::CreateSatelliteDto, repository::SatelliteRepository};
 
 #[tokio::test]
 async fn test_tiered_cache_l1_hit_and_invalidation() {
@@ -10,8 +7,10 @@ async fn test_tiered_cache_l1_hit_and_invalidation() {
     // 1. Create a satellite
     let dto = CreateSatelliteDto {
         name: "ISS (ZARYA)".to_string(),
-        line_one: "1 25544U 98067A   21239.66170074  .00000250  00000-0  20987-4 0  9994".to_string(),
-        line_two: "2 25544  51.6461  83.8459 0000831 296.4901  63.6005 15.58764259512771".to_string(),
+        line_one: "1 25544U 98067A   21239.66170074  .00000250  00000-0  20987-4 0  9994"
+            .to_string(),
+        line_two: "2 25544  51.6461  83.8459 0000831 296.4901  63.6005 15.58764259512771"
+            .to_string(),
     };
 
     let created = repo.create_satellite(dto).await.unwrap();
