@@ -76,3 +76,42 @@ pub struct NextVisiblePassResponse {
     pub azimuth_deg: f64,
     pub range_km: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GroundTrackPoint {
+    pub timestamp: DateTime<Utc>,
+    pub lat: f64,
+    pub lon: f64,
+    pub alt_km: f64,
+    pub position_ecf_km: [f64; 3],
+    pub velocity_ecf_kms: [f64; 3],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoJsonGeometry {
+    pub r#type: String,
+    pub coordinates: Vec<[f64; 3]>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoJsonFeature {
+    pub r#type: String,
+    pub geometry: GeoJsonGeometry,
+    pub properties: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GroundTrackResponse {
+    pub satellite_id: Uuid,
+    pub satellite_name: String,
+    pub orbital_period_minutes: f64,
+    pub footprint_radius_km: f64,
+    pub duration_minutes: usize,
+    pub step_seconds: usize,
+    pub trajectory: Vec<GroundTrackPoint>,
+    pub geojson: Option<GeoJsonFeature>,
+}

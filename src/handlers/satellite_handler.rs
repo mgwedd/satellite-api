@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::{
-    CreateSatelliteDto, NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
+    CreateSatelliteDto, GroundTrackResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
+    UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
@@ -38,6 +39,18 @@ pub struct NextVisibleQueryParams {
     pub alt: Option<f64>,
     /// Minimum elevation angle threshold in degrees (default: 5.0 deg)
     pub threshold_deg: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct GroundTrackQueryParams {
+    /// Trajectory projection duration in minutes (default: 90 mins, max: 1440)
+    pub duration_minutes: Option<usize>,
+    /// Step sampling interval in seconds (default: 30 secs, max: 300)
+    pub step_seconds: Option<usize>,
+    /// Output format ('geojson' or 'json', default: 'geojson')
+    pub format: Option<String>,
+    /// UTC timestamp to start projection from (defaults to current time if omitted)
+    pub start_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -320,6 +333,74 @@ pub async fn get_next_visible(
             .map_err(|e| e.to_string())?;
 
             pass_res.map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(AppError::InternalServerError)?;
+
+    Ok(Json(res))
+}
+
+/// Get Satellite 3D Ground Track & Trajectory
+///
+/// Computes 3D ECF coordinates, geodetic position, orbital period, footprint radius, and GeoJSON ground track line.
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}/groundtrack",
+    operation_id = "getGroundTrack",
+    params(
+        ("id" = Uuid, Path, description = "Satellite UUID"),
+        GroundTrackQueryParams,
+    ),
+    responses(
+        (status = 200, description = "3D Ground Track and GeoJSON trajectory", body = GroundTrackResponse),
+        (status = 404, description = "Satellite not found", body = ErrorResponse),
+        (status = 500, description = "Internal calculation error", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_ground_track(
+    Path(id): Path<Uuid>,
+    Query(params): Query<GroundTrackQueryParams>,
+    State(repo): State<SatelliteRepository>,
+) -> Result<Json<GroundTrackResponse>, AppError> {
+    let satellite = repo.get_satellite_by_id(id).await?;
+    let start_time = params.start_time.unwrap_or_else(Utc::now);
+    let duration_minutes = params.duration_minutes.unwrap_or(90);
+    let step_seconds = params.step_seconds.unwrap_or(30);
+    let include_geojson = params
+        .format
+        .as_deref()
+        .map(|f| f.eq_ignore_ascii_case("geojson"))
+        .unwrap_or(true);
+
+    let time_bucket = start_time.timestamp() / 60;
+    let cache_key = format!(
+        "groundtrack:{}:{}:{}:{}:{}:{}",
+        id,
+        duration_minutes,
+        step_seconds,
+        include_geojson,
+        time_bucket,
+        satellite.last_modified_date.timestamp()
+    );
+
+    let res = repo
+        .cache
+        .get_or_insert_with(&cache_key, || async move {
+            let sat_clone = satellite.clone();
+            let track_res = tokio::task::spawn_blocking(move || {
+                astrodynamics::generate_ground_track(
+                    &sat_clone,
+                    start_time,
+                    duration_minutes,
+                    step_seconds,
+                    include_geojson,
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            track_res.map_err(|e| e.to_string())
         })
         .await
         .map_err(AppError::InternalServerError)?;

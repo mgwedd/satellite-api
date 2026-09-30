@@ -91,6 +91,7 @@ All endpoints are versioned under `/v1`.
 | `DELETE` | `/v1/satellites/:id` | Delete satellite record |
 | `GET` | `/v1/astrodynamics/overhead` | Find all satellites currently above observer elevation threshold |
 | `GET` | `/v1/satellites/:id/next-visible` | Compute next visible ground pass for a specific satellite |
+| `GET` | `/v1/satellites/:id/groundtrack` | Compute 3D ECF trajectory, geodetic path, and GeoJSON footprint line |
 | `POST` | `/v1/pipelines/sync` | Trigger CelesTrak TLE dataset sync (group: `stations`, `visual`, `starlink`, etc.) |
 | `GET` | `/swagger-ui` | Interactive Swagger UI API documentation |
 | `GET` | `/api-docs/openapi.json` | OpenAPI 3.0 JSON Specification |
@@ -104,13 +105,18 @@ All endpoints are versioned under `/v1`.
 curl -s "http://localhost:3000/v1/satellites?limit=5" | jq
 ```
 
-### 2. Find Overhead Satellites for Observer Location
+### 2. Generate 3D Ground Track & GeoJSON Trajectory
+```bash
+curl -s "http://localhost:3000/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+```
+
+### 3. Find Overhead Satellites for Observer Location
 Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
 ```bash
 curl -s "http://localhost:3000/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
-### 3. Compute Next Visible Pass for Satellite
+### 4. Compute Next Visible Pass for Satellite
 ```bash
 curl -s "http://localhost:3000/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```

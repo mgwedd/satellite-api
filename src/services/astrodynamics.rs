@@ -1,5 +1,8 @@
 use crate::error::AppError;
-use crate::models::{NextVisiblePassResponse, OverheadResponse, Satellite};
+use crate::models::{
+    GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint, GroundTrackResponse,
+    NextVisiblePassResponse, OverheadResponse, Satellite,
+};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
 use sgp4::{Constants, Elements, Prediction};
@@ -194,4 +197,157 @@ pub fn find_next_visible_pass(
     }
 
     Err(AppError::NotFound)
+}
+
+/// Converts ECF position [X, Y, Z] in km to WGS-84 Geodetic Latitude (deg), Longitude (deg), and Altitude (km)
+pub fn ecf_to_geodetic(ecf: [f64; 3]) -> (f64, f64, f64) {
+    let a = 6378.137; // WGS-84 equatorial radius in km
+    let f = 1.0 / 298.257223563;
+    let b = a * (1.0 - f);
+    let e2 = (a * a - b * b) / (a * a);
+    let ep2 = (a * a - b * b) / (b * b);
+
+    let x = ecf[0];
+    let y = ecf[1];
+    let z = ecf[2];
+    let p = (x * x + y * y).sqrt();
+
+    let lon = y.atan2(x).to_degrees();
+
+    if p < 1e-6 {
+        let lat = if z >= 0.0 { 90.0 } else { -90.0 };
+        let alt_km = z.abs() - b;
+        return (lat, lon, alt_km);
+    }
+
+    let theta = (z * a).atan2(p * b);
+    let lat_rad = (z + ep2 * b * theta.sin().powi(3)).atan2(p - e2 * a * theta.cos().powi(3));
+    let lat = lat_rad.to_degrees();
+
+    let n = a / (1.0 - e2 * lat_rad.sin().powi(2)).sqrt();
+    let alt_km = p / lat_rad.cos() - n;
+
+    (lat, lon, alt_km)
+}
+
+/// Converts ECI velocity vector to ECF velocity vector accounting for Earth rotation
+pub fn eci_to_ecf_velocity(eci_pos: [f64; 3], eci_vel: [f64; 3], lst_rad: f64) -> [f64; 3] {
+    let omega_e = 7.2921151467e-5; // Earth rotation angular velocity in rad/s
+    let vx_eff = eci_vel[0] + omega_e * eci_pos[1];
+    let vy_eff = eci_vel[1] - omega_e * eci_pos[0];
+    let vz_eff = eci_vel[2];
+
+    let vx_ecf = vx_eff * lst_rad.cos() + vy_eff * lst_rad.sin();
+    let vy_ecf = -vx_eff * lst_rad.sin() + vy_eff * lst_rad.cos();
+    let vz_ecf = vz_eff;
+
+    [vx_ecf, vy_ecf, vz_ecf]
+}
+
+/// Computes the sub-satellite footprint coverage circle radius on Earth in km
+pub fn calculate_footprint_radius(alt_km: f64) -> f64 {
+    let re = 6378.137;
+    let safe_alt = alt_km.max(0.0);
+    let cos_val = (re / (re + safe_alt)).clamp(-1.0, 1.0);
+    re * cos_val.acos()
+}
+
+/// Generates a full orbital 3D ground track trajectory and GeoJSON footprint feature
+pub fn generate_ground_track(
+    satellite: &Satellite,
+    start_time: DateTime<Utc>,
+    duration_minutes: usize,
+    step_seconds: usize,
+    include_geojson: bool,
+) -> Result<GroundTrackResponse, AppError> {
+    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
+    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+
+    let elements = Elements::from_tle(
+        Some(satellite.name.clone()),
+        line1.as_bytes(),
+        line2.as_bytes(),
+    )
+    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
+
+    let constants = Constants::from_elements(&elements)
+        .map_err(|e| AppError::Sgp4Error(format!("Constants error: {:?}", e)))?;
+
+    let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
+    let mean_motion_revs_day = elements.mean_motion;
+    let orbital_period_minutes = if mean_motion_revs_day > 0.0 {
+        1440.0 / mean_motion_revs_day
+    } else {
+        90.0
+    };
+
+    let duration_mins = duration_minutes.clamp(1, 1440);
+    let step_secs = step_seconds.clamp(1, 300);
+    let total_steps = (duration_mins * 60) / step_secs;
+    let mut trajectory = Vec::with_capacity(total_steps + 1);
+    let mut geojson_coords = Vec::with_capacity(if include_geojson { total_steps + 1 } else { 0 });
+    let mut sum_alt = 0.0;
+
+    for i in 0..=total_steps {
+        let offset_secs = (i * step_secs) as i64;
+        let current_time = start_time + chrono::Duration::seconds(offset_secs);
+        let minutes_since_epoch = (current_time - epoch_dt).num_milliseconds() as f64 / 60000.0;
+
+        if let Ok(prediction) = constants.propagate(minutes_since_epoch) {
+            let lst = calculate_local_sidereal_time(current_time, 0.0);
+            let pos_ecf = eci_to_ecf(prediction.position, lst);
+            let vel_ecf = eci_to_ecf_velocity(prediction.position, prediction.velocity, lst);
+            let (lat, lon, alt_km) = ecf_to_geodetic(pos_ecf);
+
+            sum_alt += alt_km;
+            trajectory.push(GroundTrackPoint {
+                timestamp: current_time,
+                lat,
+                lon,
+                alt_km,
+                position_ecf_km: pos_ecf,
+                velocity_ecf_kms: vel_ecf,
+            });
+
+            if include_geojson {
+                geojson_coords.push([lon, lat, alt_km]);
+            }
+        }
+    }
+
+    let avg_alt_km = if !trajectory.is_empty() {
+        sum_alt / trajectory.len() as f64
+    } else {
+        400.0
+    };
+    let footprint_radius_km = calculate_footprint_radius(avg_alt_km);
+
+    let geojson = if include_geojson {
+        Some(GeoJsonFeature {
+            r#type: "Feature".to_string(),
+            geometry: GeoJsonGeometry {
+                r#type: "LineString".to_string(),
+                coordinates: geojson_coords,
+            },
+            properties: serde_json::json!({
+                "satelliteId": satellite.id,
+                "satelliteName": satellite.name,
+                "periodMinutes": orbital_period_minutes,
+                "footprintRadiusKm": footprint_radius_km,
+            }),
+        })
+    } else {
+        None
+    };
+
+    Ok(GroundTrackResponse {
+        satellite_id: satellite.id,
+        satellite_name: satellite.name.clone(),
+        orbital_period_minutes,
+        footprint_radius_km,
+        duration_minutes: duration_mins,
+        step_seconds: step_secs,
+        trajectory,
+        geojson,
+    })
 }
