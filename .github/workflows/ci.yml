@@ -1,10 +1,11 @@
-name: CI Pipeline
+name: CI & SDK Release Pipeline
 
 on:
   push:
-    branches: [ main, master, development, read-celestrak-columns, "feat/**" ]
+    branches: [ main, read-celestrak-columns, "feat/**" ]
+    tags: [ "v*" ]
   pull_request:
-    branches: [ main, master, development ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -88,9 +89,11 @@ jobs:
             echo "Notice: Base or Head OpenAPI spec file missing (initial setup or non-PR event). Skipping diff."
           fi
 
-  fern-check:
-    name: Fern Spec & SDK Verification
+  fern-sdk-build-and-release:
+    name: Fern SDK Generation & Release Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -105,3 +108,23 @@ jobs:
 
       - name: Run Fern Spec Check
         run: fern check --warnings
+
+      - name: Generate SDKs with Fern
+        run: fern generate
+
+      - name: Package SDK Archives
+        run: |
+          mkdir -p dist
+          tar -czvf dist/satellite-api-sdk-typescript.tar.gz -C sdks/typescript .
+          tar -czvf dist/satellite-api-sdk-python.tar.gz -C sdks/python .
+          tar -czvf dist/satellite-api-sdk-go.tar.gz -C sdks/go .
+
+      - name: Release SDK Archives to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/satellite-api-sdk-typescript.tar.gz
+            dist/satellite-api-sdk-python.tar.gz
+            dist/satellite-api-sdk-go.tar.gz
+          generate_release_notes: true

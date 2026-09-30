@@ -125,16 +125,15 @@ curl -X POST "http://localhost:3000/v1/pipelines/sync?group=stations" | jq
 
 ## 📦 Client SDKs
 
-Pre-built ergonomic SDKs generated via [Fern](https://buildwithfern.com/) are available in the repository:
+Ergonomic SDKs for **TypeScript**, **Python**, and **Go** are generated automatically from the OpenAPI specification using [Fern](https://buildwithfern.com/).
 
-* **TypeScript**: [`sdks/typescript/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/typescript)
-* **Python**: [`sdks/python/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/python)
-* **Go**: [`sdks/go/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks/go)
-
-To re-generate SDKs from updated OpenAPI spec:
-```bash
-fern generate
-```
+* **CI Release Assets**: Official SDK release packages (`satellite-api-sdk-typescript.tar.gz`, `satellite-api-sdk-python.tar.gz`, `satellite-api-sdk-go.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
+* **Local SDK Generation**: To generate SDKs locally for testing:
+  ```bash
+  npm install -g fern-api
+  fern generate
+  ```
+  Generated SDK files will output to the local un-tracked `sdks/` directory.
 
 ---
 
