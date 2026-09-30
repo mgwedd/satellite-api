@@ -592,16 +592,7 @@
           "coordinates"
         ],
         "properties": {
-          "coordinates": {
-            "type": "array",
-            "items": {
-              "type": "array",
-              "items": {
-                "type": "number",
-                "format": "double"
-              }
-            }
-          },
+          "coordinates": {},
           "type": {
             "type": "string"
           }
@@ -662,9 +653,20 @@
           "trajectory"
         ],
         "properties": {
+          "czml": {
+            "nullable": true
+          },
           "durationMinutes": {
             "type": "integer",
             "minimum": 0
+          },
+          "footprintPolygon": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoJsonFeature"
+              }
+            ],
+            "nullable": true
           },
           "footprintRadiusKm": {
             "type": "number",

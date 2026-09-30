@@ -27,7 +27,7 @@ fn test_generate_ground_track_direct() {
         last_modified_date: chrono::Utc::now(),
     };
 
-    let res = astrodynamics::generate_ground_track(&sat, chrono::Utc::now(), 30, 60, true);
+    let res = astrodynamics::generate_ground_track(&sat, chrono::Utc::now(), 30, 60, true, true);
     assert!(
         res.is_ok(),
         "Expected groundtrack generation to succeed: {:?}",
@@ -37,6 +37,9 @@ fn test_generate_ground_track_direct() {
     assert_eq!(track.trajectory.len(), 31);
     assert!(track.orbital_period_minutes > 80.0);
     assert!(track.footprint_radius_km > 1000.0);
+    assert!(track.geojson.is_some());
+    assert!(track.footprint_polygon.is_some());
+    assert!(track.czml.is_some());
 }
 
 #[tokio::test]
@@ -67,11 +70,11 @@ async fn test_groundtrack_endpoint_and_geojson() {
     let sat_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let sat_id = sat_json["id"].as_str().unwrap();
 
-    // 2. Query Ground Track endpoint
+    // 2. Query Ground Track endpoint with format=all (GeoJSON + Footprint Polygon + CZML)
     let req = Request::builder()
         .method("GET")
         .uri(format!(
-            "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=geojson",
+            "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=all",
             sat_id
         ))
         .body(Body::empty())
@@ -93,7 +96,7 @@ async fn test_groundtrack_endpoint_and_geojson() {
 
     // Verify trajectory points array
     let trajectory = track_json["trajectory"].as_array().unwrap();
-    assert_eq!(trajectory.len(), 31); // (30 mins * 60s) / 60s + 1 = 31 points
+    assert_eq!(trajectory.len(), 31);
 
     let first_pt = &trajectory[0];
     assert!(first_pt["timestamp"].is_string());
@@ -103,12 +106,24 @@ async fn test_groundtrack_endpoint_and_geojson() {
     assert_eq!(first_pt["positionEcfKm"].as_array().unwrap().len(), 3);
     assert_eq!(first_pt["velocityEcfKms"].as_array().unwrap().len(), 3);
 
-    // Verify GeoJSON structure
+    // Verify GeoJSON trajectory feature
     let geojson = &track_json["geojson"];
     assert_eq!(geojson["type"], "Feature");
-    assert_eq!(geojson["geometry"]["type"], "LineString");
+    assert!(
+        geojson["geometry"]["type"] == "LineString"
+            || geojson["geometry"]["type"] == "MultiLineString"
+    );
 
-    let coords = geojson["geometry"]["coordinates"].as_array().unwrap();
-    assert_eq!(coords.len(), 31);
-    assert_eq!(coords[0].as_array().unwrap().len(), 3);
+    // Verify Footprint Polygon feature
+    let footprint_poly = &track_json["footprintPolygon"];
+    assert_eq!(footprint_poly["type"], "Feature");
+    assert_eq!(footprint_poly["geometry"]["type"], "Polygon");
+
+    // Verify CZML array
+    let czml = &track_json["czml"];
+    assert!(czml.is_array());
+    let czml_arr = czml.as_array().unwrap();
+    assert_eq!(czml_arr[0]["id"], "document");
+    assert_eq!(czml_arr[1]["id"], sat_id);
+    assert!(czml_arr[1]["position"]["cartesian"].is_array());
 }

@@ -252,13 +252,139 @@ pub fn calculate_footprint_radius(alt_km: f64) -> f64 {
     re * cos_val.acos()
 }
 
-/// Generates a full orbital 3D ground track trajectory and GeoJSON footprint feature
+/// Calculates 36 boundary ring coordinates forming a sub-satellite ground footprint circle on Earth
+pub fn generate_footprint_polygon_coords(
+    lat_deg: f64,
+    lon_deg: f64,
+    radius_km: f64,
+) -> Vec<Vec<[f64; 3]>> {
+    let re = 6378.137;
+    let ang_dist = radius_km / re;
+    let lat0 = lat_deg.to_radians();
+    let lon0 = lon_deg.to_radians();
+
+    let mut ring = Vec::with_capacity(37);
+    for step in 0..=36 {
+        let azimuth = (step as f64 * 10.0).to_radians();
+        let lat_rad =
+            (lat0.sin() * ang_dist.cos() + lat0.cos() * ang_dist.sin() * azimuth.cos()).asin();
+        let dlon = (azimuth.sin() * ang_dist.sin() * lat0.cos())
+            .atan2(ang_dist.cos() - lat0.sin() * lat_rad.sin());
+        let mut lon = (lon0 + dlon).to_degrees();
+
+        if lon > 180.0 {
+            lon -= 360.0;
+        } else if lon < -180.0 {
+            lon += 360.0;
+        }
+        let lat = lat_rad.to_degrees();
+
+        ring.push([lon, lat, 0.0]);
+    }
+
+    vec![ring]
+}
+
+/// Splits continuous coordinates across the ±180° Anti-Meridian line to prevent rendering streaks
+pub fn build_anti_meridian_geojson_geometry(points: &[[f64; 3]]) -> GeoJsonGeometry {
+    if points.is_empty() {
+        return GeoJsonGeometry {
+            r#type: "LineString".to_string(),
+            coordinates: serde_json::json!([]),
+        };
+    }
+
+    let mut segments: Vec<Vec<[f64; 3]>> = Vec::new();
+    let mut current_segment: Vec<[f64; 3]> = Vec::new();
+
+    for pt in points {
+        if let Some(last_pt) = current_segment.last() {
+            let lon_diff = (pt[0] - last_pt[0]).abs();
+            if lon_diff > 180.0 && !current_segment.is_empty() {
+                segments.push(current_segment);
+                current_segment = Vec::new();
+            }
+        }
+        current_segment.push(*pt);
+    }
+    if !current_segment.is_empty() {
+        segments.push(current_segment);
+    }
+
+    if segments.len() == 1 {
+        GeoJsonGeometry {
+            r#type: "LineString".to_string(),
+            coordinates: serde_json::json!(segments[0]),
+        }
+    } else {
+        GeoJsonGeometry {
+            r#type: "MultiLineString".to_string(),
+            coordinates: serde_json::json!(segments),
+        }
+    }
+}
+
+/// Generates a valid CZML Document for Cesium.js 3D globe animation
+pub fn generate_czml_document(
+    satellite: &Satellite,
+    trajectory: &[GroundTrackPoint],
+    step_seconds: usize,
+) -> serde_json::Value {
+    if trajectory.is_empty() {
+        return serde_json::json!([]);
+    }
+
+    let start_iso = trajectory[0].timestamp.to_rfc3339();
+    let end_iso = trajectory[trajectory.len() - 1].timestamp.to_rfc3339();
+    let availability = format!("{}/{}", start_iso, end_iso);
+
+    let mut cartesian_coords = Vec::with_capacity(trajectory.len() * 4);
+    for (idx, pt) in trajectory.iter().enumerate() {
+        let time_offset = (idx * step_seconds) as f64;
+        cartesian_coords.push(serde_json::json!(time_offset));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[0] * 1000.0));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[1] * 1000.0));
+        cartesian_coords.push(serde_json::json!(pt.position_ecf_km[2] * 1000.0));
+    }
+
+    serde_json::json!([
+        {
+            "id": "document",
+            "name": format!("Trajectory for {}", satellite.name),
+            "version": "1.0"
+        },
+        {
+            "id": satellite.id.to_string(),
+            "name": satellite.name,
+            "availability": availability,
+            "position": {
+                "epoch": start_iso,
+                "cartesian": cartesian_coords
+            },
+            "path": {
+                "show": true,
+                "width": 2,
+                "resolution": 120,
+                "material": {
+                    "solidColor": {
+                        "color": {
+                            "rgba": [0, 255, 255, 255]
+                        }
+                    }
+                }
+            }
+        }
+    ])
+}
+
+/// Generates a full orbital 3D ground track trajectory, GeoJSON Anti-Meridian line, Footprint Polygon, and CZML
 pub fn generate_ground_track(
     satellite: &Satellite,
     start_time: DateTime<Utc>,
     duration_minutes: usize,
     step_seconds: usize,
     include_geojson: bool,
+    include_czml: bool,
 ) -> Result<GroundTrackResponse, AppError> {
     let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
     let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
@@ -322,20 +448,47 @@ pub fn generate_ground_track(
     };
     let footprint_radius_km = calculate_footprint_radius(avg_alt_km);
 
-    let geojson = if include_geojson {
-        Some(GeoJsonFeature {
+    let (geojson, footprint_polygon) = if include_geojson {
+        let geometry = build_anti_meridian_geojson_geometry(&geojson_coords);
+        let feature = GeoJsonFeature {
             r#type: "Feature".to_string(),
-            geometry: GeoJsonGeometry {
-                r#type: "LineString".to_string(),
-                coordinates: geojson_coords,
-            },
+            geometry,
             properties: serde_json::json!({
                 "satelliteId": satellite.id,
                 "satelliteName": satellite.name,
                 "periodMinutes": orbital_period_minutes,
                 "footprintRadiusKm": footprint_radius_km,
             }),
-        })
+        };
+
+        let footprint_poly = if let Some(first_pt) = trajectory.first() {
+            let poly_ring =
+                generate_footprint_polygon_coords(first_pt.lat, first_pt.lon, footprint_radius_km);
+            Some(GeoJsonFeature {
+                r#type: "Feature".to_string(),
+                geometry: GeoJsonGeometry {
+                    r#type: "Polygon".to_string(),
+                    coordinates: serde_json::json!(poly_ring),
+                },
+                properties: serde_json::json!({
+                    "satelliteId": satellite.id,
+                    "satelliteName": satellite.name,
+                    "footprintRadiusKm": footprint_radius_km,
+                    "centerLat": first_pt.lat,
+                    "centerLon": first_pt.lon,
+                }),
+            })
+        } else {
+            None
+        };
+
+        (Some(feature), footprint_poly)
+    } else {
+        (None, None)
+    };
+
+    let czml = if include_czml {
+        Some(generate_czml_document(satellite, &trajectory, step_secs))
     } else {
         None
     };
@@ -349,5 +502,7 @@ pub fn generate_ground_track(
         step_seconds: step_secs,
         trajectory,
         geojson,
+        footprint_polygon,
+        czml,
     })
 }

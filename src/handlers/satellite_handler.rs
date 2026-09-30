@@ -367,19 +367,21 @@ pub async fn get_ground_track(
     let start_time = params.start_time.unwrap_or_else(Utc::now);
     let duration_minutes = params.duration_minutes.unwrap_or(90);
     let step_seconds = params.step_seconds.unwrap_or(30);
-    let include_geojson = params
-        .format
-        .as_deref()
-        .map(|f| f.eq_ignore_ascii_case("geojson"))
-        .unwrap_or(true);
+    let (include_geojson, include_czml) = match params.format.as_deref() {
+        Some(f) if f.eq_ignore_ascii_case("czml") => (false, true),
+        Some(f) if f.eq_ignore_ascii_case("json") => (false, false),
+        Some(f) if f.eq_ignore_ascii_case("all") => (true, true),
+        _ => (true, false),
+    };
 
     let time_bucket = start_time.timestamp() / 60;
     let cache_key = format!(
-        "groundtrack:{}:{}:{}:{}:{}:{}",
+        "groundtrack:{}:{}:{}:{}:{}:{}:{}",
         id,
         duration_minutes,
         step_seconds,
         include_geojson,
+        include_czml,
         time_bucket,
         satellite.last_modified_date.timestamp()
     );
@@ -395,6 +397,7 @@ pub async fn get_ground_track(
                     duration_minutes,
                     step_seconds,
                     include_geojson,
+                    include_czml,
                 )
             })
             .await

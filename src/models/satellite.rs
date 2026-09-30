@@ -92,7 +92,7 @@ pub struct GroundTrackPoint {
 #[serde(rename_all = "camelCase")]
 pub struct GeoJsonGeometry {
     pub r#type: String,
-    pub coordinates: Vec<[f64; 3]>,
+    pub coordinates: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -114,4 +114,6 @@ pub struct GroundTrackResponse {
     pub step_seconds: usize,
     pub trajectory: Vec<GroundTrackPoint>,
     pub geojson: Option<GeoJsonFeature>,
+    pub footprint_polygon: Option<GeoJsonFeature>,
+    pub czml: Option<serde_json::Value>,
 }
