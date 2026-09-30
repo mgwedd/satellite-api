@@ -27,6 +27,9 @@ pub enum AppError {
 
     #[error("Internal server error: {0}")]
     InternalServerError(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
 }
 
 impl IntoResponse for AppError {
@@ -38,6 +41,7 @@ impl IntoResponse for AppError {
             AppError::InternalServerError(ref msg) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
             }
+            AppError::Unauthorized(ref msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
         };
 
         let body = Json(ErrorResponse {

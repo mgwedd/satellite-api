@@ -11,7 +11,29 @@ async fn test_full_satellite_crud_and_overhead() {
     let repo = SatelliteRepository::new(None).await;
     let app = create_router(repo);
 
-    // 1. Create a satellite from TLE
+    // 0. Login to obtain JWT Bearer Token
+    let login_payload = json!({
+        "username": "astrodynamics_admin",
+        "role": "admin"
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/auth/login")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let auth_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+    let token = auth_json["token"].as_str().unwrap();
+
+    // 1a. Attempt to create satellite without Authorization header -> Expect 401 Unauthorized
     let create_payload = json!({
         "name": "ATLAS CENTAUR 2",
         "tleLineOne": "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
@@ -22,6 +44,18 @@ async fn test_full_satellite_crud_and_overhead() {
         .method("POST")
         .uri("/v1/satellites")
         .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // 1b. Create satellite with valid JWT Authorization header -> Expect 201 Created
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/satellites")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
         .unwrap();
 
@@ -40,7 +74,7 @@ async fn test_full_satellite_crud_and_overhead() {
         "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994"
     );
 
-    // 2. Get paginated list of satellites
+    // 2. Get paginated list of satellites (Public endpoint)
     let req = Request::builder()
         .method("GET")
         .uri("/v1/satellites")
@@ -57,7 +91,7 @@ async fn test_full_satellite_crud_and_overhead() {
     assert_eq!(list_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(list_json["pagination"]["limit"], 20);
 
-    // 3. Get satellite by ID
+    // 3. Get satellite by ID (Public endpoint)
     let req = Request::builder()
         .method("GET")
         .uri(format!("/v1/satellites/{}", sat_id))
@@ -67,7 +101,7 @@ async fn test_full_satellite_crud_and_overhead() {
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    // 4. Test Rayon overhead satellite calculation at epoch time
+    // 4. Test Rayon overhead satellite calculation at epoch time (Public endpoint)
     let req = Request::builder()
         .method("GET")
         .uri("/v1/astrodynamics/overhead?lat=34.05&lon=-118.25&time=2021-08-27T15:52:50Z")
@@ -84,10 +118,21 @@ async fn test_full_satellite_crud_and_overhead() {
     assert!(overhead_json["elevation"].is_number());
     assert_eq!(overhead_json["satellite"]["name"], "ATLAS CENTAUR 2");
 
-    // 5. Delete satellite
+    // 5a. Delete satellite without authorization -> Expect 401 Unauthorized
     let req = Request::builder()
         .method("DELETE")
         .uri(format!("/v1/satellites/{}", sat_id))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // 5b. Delete satellite with valid JWT Authorization header -> Expect 204 No Content
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/v1/satellites/{}", sat_id))
+        .header("authorization", format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 

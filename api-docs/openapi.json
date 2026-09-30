@@ -88,13 +88,54 @@
         }
       }
     },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "OpenAPI endpoint handler to issue a JWT authentication token for testing or client auth.",
+        "operationId": "loginHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "JWT Token issued successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/pipelines/sync": {
       "post": {
         "tags": [
           "Pipelines"
         ],
         "summary": "Trigger CelesTrak Pipeline Sync",
-        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group.",
+        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth.",
         "operationId": "triggerPipelineSync",
         "parameters": [
           {
@@ -119,6 +160,16 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Pipeline sync execution failed",
             "content": {
@@ -129,7 +180,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites": {
@@ -179,7 +235,7 @@
           "Satellites"
         ],
         "summary": "Create Satellite",
-        "description": "Creates a new satellite record from Two-Line Element (TLE) set data.",
+        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth.",
         "operationId": "createSatellite",
         "requestBody": {
           "content": {
@@ -211,8 +267,23 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites/{id}": {
@@ -263,7 +334,7 @@
           "Satellites"
         ],
         "summary": "Delete Satellite",
-        "description": "Deletes a satellite record by its unique UUID.",
+        "description": "Deletes a satellite record by its unique UUID. Protected by JWT auth.",
         "operationId": "deleteSatellite",
         "parameters": [
           {
@@ -281,6 +352,16 @@
           "204": {
             "description": "Satellite deleted successfully"
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Satellite not found",
             "content": {
@@ -291,14 +372,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       },
       "patch": {
         "tags": [
           "Satellites"
         ],
         "summary": "Update Satellite",
-        "description": "Updates a satellite's name or TLE orbital parameters.",
+        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth.",
         "operationId": "updateSatellite",
         "parameters": [
           {
@@ -333,6 +419,16 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Satellite not found",
             "content": {
@@ -343,7 +439,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites/{id}/groundtrack": {
@@ -532,6 +633,64 @@
   },
   "components": {
     "schemas": {
+      "AuthResponse": {
+        "type": "object",
+        "description": "Response returned upon successful JWT token generation.",
+        "required": [
+          "token",
+          "tokenType",
+          "expiresIn",
+          "claims"
+        ],
+        "properties": {
+          "claims": {
+            "$ref": "#/components/schemas/Claims"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Token lifetime in seconds (e.g. 86400)",
+            "minimum": 0
+          },
+          "token": {
+            "type": "string",
+            "description": "Encoded JWT Bearer token"
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Token type (always \"Bearer\")"
+          }
+        }
+      },
+      "Claims": {
+        "type": "object",
+        "description": "JWT Claims payload structure containing subject, expiration, issued-at, and role claims.",
+        "required": [
+          "sub",
+          "exp",
+          "iat",
+          "role"
+        ],
+        "properties": {
+          "exp": {
+            "type": "integer",
+            "description": "Expiration timestamp in seconds since Unix epoch",
+            "minimum": 0
+          },
+          "iat": {
+            "type": "integer",
+            "description": "Issued-at timestamp in seconds since Unix epoch",
+            "minimum": 0
+          },
+          "role": {
+            "type": "string",
+            "description": "User role (e.g. \"admin\", \"operator\", \"user\")"
+          },
+          "sub": {
+            "type": "string",
+            "description": "Subject (User ID, username, or service ID)"
+          }
+        }
+      },
       "CreateSatelliteDto": {
         "type": "object",
         "required": [
@@ -700,6 +859,24 @@
             "items": {
               "$ref": "#/components/schemas/GroundTrackPoint"
             }
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Request body for JWT authentication login/token generation endpoint.",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Optional user role (defaults to \"operator\" if omitted)",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "description": "Username or service subject identifier"
           }
         }
       },
@@ -882,9 +1059,19 @@
           }
         }
       }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
     }
   },
   "tags": [
+    {
+      "name": "Authentication",
+      "description": "JWT Token issuance endpoints"
+    },
     {
       "name": "Satellites",
       "description": "Satellite management endpoints"

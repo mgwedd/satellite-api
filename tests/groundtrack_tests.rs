@@ -47,7 +47,29 @@ async fn test_groundtrack_endpoint_and_geojson() {
     let repo = SatelliteRepository::new(None).await;
     let app = create_router(repo);
 
-    // 1. Create satellite with valid TLE
+    // 0. Login to obtain JWT Bearer Token
+    let login_payload = json!({
+        "username": "groundtrack_tester",
+        "role": "admin"
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/auth/login")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let auth_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+    let token = auth_json["token"].as_str().unwrap();
+
+    // 1. Create satellite with valid TLE and Authorization header
     let create_payload = json!({
         "name": "ATLAS CENTAUR 2",
         "tleLineOne": "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
@@ -58,6 +80,7 @@ async fn test_groundtrack_endpoint_and_geojson() {
         .method("POST")
         .uri("/v1/satellites")
         .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
         .unwrap();
 
