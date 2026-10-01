@@ -18,6 +18,9 @@ echo "     Runs 'fern docs dev' for live multi-language SDK playground."
 echo ""
 echo "  3) Static HTML UI Preview"
 echo "     Serves api-docs/index.html on http://localhost:8000"
+echo ""
+echo "  4) Generate Local JWT Token"
+echo "     Generates a valid Bearer token for authenticating in Swagger UI / Fern Docs / Docker"
 echo "============================================================"
 
 MODE="${1:-1}"
@@ -36,8 +39,12 @@ case "$MODE" in
     echo "🌐 Launching local HTTP server for api-docs/index.html..."
     python3 -m http.server 8000 --directory api-docs
     ;;
+  4|"jwt"|"token")
+    ./scripts/make-jwt.sh "${2:-admin_user}" "${3:-admin}"
+    ;;
   *)
-    echo "Usage: ./scripts/dev-ui.sh [1|2|3|server|fern|static]"
+    echo "Usage: ./scripts/dev-ui.sh [1|2|3|4|server|fern|static|jwt]"
     exit 1
     ;;
 esac
+
