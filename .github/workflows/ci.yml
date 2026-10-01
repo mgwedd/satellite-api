@@ -132,3 +132,25 @@ jobs:
             dist/astrea-sda-api-sdk-java.tar.gz
             dist/astrea-sda-api-sdk-rust.tar.gz
           generate_release_notes: true
+
+  deploy-railway:
+    name: Deploy to Railway (Production)
+    runs-on: ubuntu-latest
+    needs:
+      - test-and-build
+      - docker-build-check
+      - openapi-breaking-change-check
+      - fern-sdk-build-and-release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service astrea-sda-api --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
