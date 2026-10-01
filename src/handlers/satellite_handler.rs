@@ -1,3 +1,4 @@
+use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
     CreateSatelliteDto, GroundTrackResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
@@ -69,7 +70,7 @@ pub struct PipelineSyncResponse {
 
 /// Create Satellite
 ///
-/// Creates a new satellite record from Two-Line Element (TLE) set data.
+/// Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     post,
     path = "/v1/satellites",
@@ -77,14 +78,20 @@ pub struct PipelineSyncResponse {
     request_body = CreateSatelliteDto,
     responses(
         (status = 201, description = "Satellite created successfully", body = Satellite),
-        (status = 400, description = "Invalid request payload", body = ErrorResponse)
+        (status = 400, description = "Invalid request payload", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
+        (status = 403, description = "Forbidden - Insufficient role permissions", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Satellites"
 )]
 pub async fn create_satellite(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Json(dto): Json<CreateSatelliteDto>,
 ) -> Result<(StatusCode, Json<Satellite>), AppError> {
+    claims.require_role(UserRole::Editor)?;
+    tracing::info!("Satellite creation requested by JWT user: {}", claims.sub);
     let satellite = repo.create_satellite(dto).await?;
     Ok((StatusCode::CREATED, Json(satellite)))
 }
@@ -136,7 +143,7 @@ pub async fn get_satellite(
 
 /// Update Satellite
 ///
-/// Updates a satellite's name or TLE orbital parameters.
+/// Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     patch,
     path = "/v1/satellites/{id}",
@@ -147,22 +154,28 @@ pub async fn get_satellite(
     request_body = UpdateSatelliteDto,
     responses(
         (status = 200, description = "Satellite updated successfully", body = Satellite),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
+        (status = 403, description = "Forbidden - Insufficient role permissions", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Satellites"
 )]
 pub async fn update_satellite(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     Json(dto): Json<UpdateSatelliteDto>,
 ) -> Result<Json<Satellite>, AppError> {
+    claims.require_role(UserRole::Editor)?;
+    tracing::info!("Satellite update requested by JWT user: {}", claims.sub);
     let satellite = repo.update_satellite_by_id(id, dto).await?;
     Ok(Json(satellite))
 }
 
 /// Delete Satellite
 ///
-/// Deletes a satellite record by its unique UUID.
+/// Deletes a satellite record by its unique UUID. Protected by JWT auth (requires 'admin' role).
 #[utoipa::path(
     delete,
     path = "/v1/satellites/{id}",
@@ -172,21 +185,27 @@ pub async fn update_satellite(
     ),
     responses(
         (status = 204, description = "Satellite deleted successfully"),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
+        (status = 403, description = "Forbidden - Admin role required", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Satellites"
 )]
 pub async fn delete_satellite(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
+    claims.require_role(UserRole::Admin)?;
+    tracing::info!("Satellite deletion requested by JWT admin: {}", claims.sub);
     repo.delete_satellite_by_id(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Trigger CelesTrak Pipeline Sync
 ///
-/// Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group.
+/// Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     post,
     path = "/v1/pipelines/sync",
@@ -194,14 +213,21 @@ pub async fn delete_satellite(
     params(PipelineSyncQueryParams),
     responses(
         (status = 200, description = "Pipeline sync completed successfully", body = PipelineSyncResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
+        (status = 403, description = "Forbidden - Insufficient role permissions", body = ErrorResponse),
         (status = 500, description = "Pipeline sync execution failed", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Pipelines"
 )]
 pub async fn trigger_pipeline_sync(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(params): Query<PipelineSyncQueryParams>,
 ) -> Result<Json<PipelineSyncResponse>, AppError> {
+    claims.require_role(UserRole::Editor)?;
+    tracing::info!("Pipeline sync triggered by JWT user: {}", claims.sub);
+
     let group = match params.group.as_deref() {
         Some("visual") => CelesTrakGroup::Visual,
         Some("starlink") => CelesTrakGroup::Starlink,

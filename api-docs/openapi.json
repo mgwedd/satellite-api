@@ -88,13 +88,54 @@
         }
       }
     },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "OpenAPI endpoint handler to issue an RS256 JWT authentication token for testing or client auth.",
+        "operationId": "loginHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "RS256 JWT Token issued successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/pipelines/sync": {
       "post": {
         "tags": [
           "Pipelines"
         ],
         "summary": "Trigger CelesTrak Pipeline Sync",
-        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group.",
+        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "triggerPipelineSync",
         "parameters": [
           {
@@ -119,6 +160,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Pipeline sync execution failed",
             "content": {
@@ -129,7 +190,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites": {
@@ -179,7 +245,7 @@
           "Satellites"
         ],
         "summary": "Create Satellite",
-        "description": "Creates a new satellite record from Two-Line Element (TLE) set data.",
+        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "createSatellite",
         "requestBody": {
           "content": {
@@ -211,8 +277,33 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites/{id}": {
@@ -263,7 +354,7 @@
           "Satellites"
         ],
         "summary": "Delete Satellite",
-        "description": "Deletes a satellite record by its unique UUID.",
+        "description": "Deletes a satellite record by its unique UUID. Protected by JWT auth (requires 'admin' role).",
         "operationId": "deleteSatellite",
         "parameters": [
           {
@@ -281,6 +372,26 @@
           "204": {
             "description": "Satellite deleted successfully"
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Admin role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Satellite not found",
             "content": {
@@ -291,14 +402,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       },
       "patch": {
         "tags": [
           "Satellites"
         ],
         "summary": "Update Satellite",
-        "description": "Updates a satellite's name or TLE orbital parameters.",
+        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "updateSatellite",
         "parameters": [
           {
@@ -333,6 +449,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Satellite not found",
             "content": {
@@ -343,7 +479,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/v1/satellites/{id}/groundtrack": {
@@ -532,6 +673,87 @@
   },
   "components": {
     "schemas": {
+      "AuthResponse": {
+        "type": "object",
+        "description": "Response returned upon successful RS256 JWT token generation.",
+        "required": [
+          "token",
+          "tokenType",
+          "expiresIn",
+          "claims"
+        ],
+        "properties": {
+          "claims": {
+            "$ref": "#/components/schemas/Claims"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Token lifetime in seconds (e.g. 86400)",
+            "minimum": 0
+          },
+          "token": {
+            "type": "string",
+            "description": "Encoded RS256 JWT Bearer token"
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Token type (always \"Bearer\")"
+          }
+        }
+      },
+      "Claims": {
+        "type": "object",
+        "description": "JWT Claims payload structure containing standard OIDC and OAuth 2.0 claim fields.",
+        "required": [
+          "sub",
+          "exp",
+          "iat",
+          "role"
+        ],
+        "properties": {
+          "aud": {
+            "type": "string",
+            "description": "Token audience (target API audience)",
+            "nullable": true
+          },
+          "exp": {
+            "type": "integer",
+            "description": "Expiration timestamp in seconds since Unix epoch",
+            "minimum": 0
+          },
+          "iat": {
+            "type": "integer",
+            "description": "Issued-at timestamp in seconds since Unix epoch",
+            "minimum": 0
+          },
+          "iss": {
+            "type": "string",
+            "description": "Token issuer (OIDC issuer URI or auth server ID)",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "description": "User role (\"viewer\", \"editor\", or \"admin\")"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of secondary roles",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Space-separated OAuth 2.0 scopes string (e.g. \"read:satellites write:satellites admin:satellites\")",
+            "nullable": true
+          },
+          "sub": {
+            "type": "string",
+            "description": "Subject (User ID, username, or client service ID)"
+          }
+        }
+      },
       "CreateSatelliteDto": {
         "type": "object",
         "required": [
@@ -700,6 +922,29 @@
             "items": {
               "$ref": "#/components/schemas/GroundTrackPoint"
             }
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Request body for JWT authentication login/token generation endpoint.",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Requested role (\"viewer\", \"editor\", or \"admin\", defaults to \"viewer\")",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional OAuth 2.0 scopes string (e.g. \"read:satellites write:satellites\")",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "description": "Username or service subject identifier"
           }
         }
       },
@@ -881,10 +1126,29 @@
             "nullable": true
           }
         }
+      },
+      "UserRole": {
+        "type": "string",
+        "description": "Modern OAuth 2.0 / OIDC Role Hierarchy for Satellite API RBAC.",
+        "enum": [
+          "viewer",
+          "editor",
+          "admin"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   },
   "tags": [
+    {
+      "name": "Authentication",
+      "description": "JWT Token issuance endpoints"
+    },
     {
       "name": "Satellites",
       "description": "Satellite management endpoints"

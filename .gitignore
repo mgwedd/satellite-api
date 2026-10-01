@@ -4,3 +4,6 @@ node_modules
 target/
 .DS_Store
 sdks/
+.keys/
+*.pem
+

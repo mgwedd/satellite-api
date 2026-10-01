@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod cache;
 pub mod config;
 pub mod error;
@@ -15,12 +16,29 @@ use axum::{
 use repository::SatelliteRepository;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::OpenApi;
+use utoipa::{
+    openapi::security::{Http, HttpAuthScheme, SecurityScheme},
+    Modify, OpenApi,
+};
 use utoipa_swagger_ui::SwaggerUi;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer_auth",
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+            );
+        }
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        auth::login_handler,
         handlers::satellite_handler::create_satellite,
         handlers::satellite_handler::list_satellites,
         handlers::satellite_handler::get_satellite,
@@ -33,6 +51,10 @@ use utoipa_swagger_ui::SwaggerUi;
     ),
     components(
         schemas(
+            auth::UserRole,
+            auth::Claims,
+            auth::LoginRequest,
+            auth::AuthResponse,
             models::Satellite,
             models::Tle,
             models::CreateSatelliteDto,
@@ -49,7 +71,9 @@ use utoipa_swagger_ui::SwaggerUi;
             error::ErrorResponse,
         )
     ),
+    modifiers(&SecurityAddon),
     tags(
+        (name = "Authentication", description = "JWT Token issuance endpoints"),
         (name = "Satellites", description = "Satellite management endpoints"),
         (name = "Astrodynamics", description = "Orbital calculations and pass predictions"),
         (name = "Pipelines", description = "CelesTrak automated discovery pipelines")
@@ -59,6 +83,7 @@ pub struct ApiDoc;
 
 pub fn create_router(repo: SatelliteRepository) -> Router {
     let api_routes = Router::new()
+        .route("/auth/login", post(auth::login_handler))
         .route(
             "/satellites",
             post(handlers::create_satellite).get(handlers::list_satellites),

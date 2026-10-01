@@ -19,12 +19,17 @@ fn test_openapi_schema_static_contract() {
     // 2. Tag Metadata
     let tags = v["tags"].as_array().expect("Missing tags array");
     let tag_names: Vec<&str> = tags.iter().filter_map(|t| t["name"].as_str()).collect();
+    assert!(tag_names.contains(&"Authentication"));
     assert!(tag_names.contains(&"Satellites"));
     assert!(tag_names.contains(&"Astrodynamics"));
     assert!(tag_names.contains(&"Pipelines"));
 
     // 3. Endpoint Paths Contract Verification
     let paths = &v["paths"];
+    assert!(
+        paths["/v1/auth/login"]["post"]["operationId"].as_str() == Some("loginHandler"),
+        "Missing or invalid operationId for POST /v1/auth/login"
+    );
     assert!(
         paths["/v1/satellites"]["post"]["operationId"].as_str() == Some("createSatellite"),
         "Missing or invalid operationId for POST /v1/satellites"
@@ -65,9 +70,13 @@ fn test_openapi_schema_static_contract() {
         "Missing or invalid operationId for POST /v1/pipelines/sync"
     );
 
-    // 4. Component Schemas Contract Verification
+    // 4. Component Schemas & Security Schemes Contract Verification
     let schemas = &v["components"]["schemas"];
     let required_schemas = [
+        "UserRole",
+        "Claims",
+        "LoginRequest",
+        "AuthResponse",
         "Satellite",
         "Tle",
         "CreateSatelliteDto",
@@ -90,6 +99,16 @@ fn test_openapi_schema_static_contract() {
             schema_name
         );
     }
+
+    // 5. Security Scheme Verification
+    assert!(
+        v["components"]["securitySchemes"]["bearer_auth"]["type"].as_str() == Some("http"),
+        "Missing bearer_auth security scheme in OpenAPI contract"
+    );
+    assert!(
+        v["components"]["securitySchemes"]["bearer_auth"]["scheme"].as_str() == Some("bearer"),
+        "Invalid bearer_auth scheme in OpenAPI contract"
+    );
 }
 
 #[test]
