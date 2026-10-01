@@ -129,6 +129,73 @@
         }
       }
     },
+    "/v1/conjunctions/search": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Search Conjunctions & Satellite Collision Radar",
+        "description": "Evaluates close-approach orbital conjunctions across all active satellites using Rayon parallel execution.",
+        "operationId": "searchConjunctions",
+        "parameters": [
+          {
+            "name": "max_distance_km",
+            "in": "query",
+            "description": "Maximum threshold distance in km between satellites to trigger a conjunction match (default: 10.0 km)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "duration_hours",
+            "in": "query",
+            "description": "Forecast window forward in hours (default: 24 hrs, max: 72)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "step_minutes",
+            "in": "query",
+            "description": "Step interval in minutes (default: 1 min, max: 60)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conjunction radar search completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConjunctionSearchResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal calculation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/pipelines/sync": {
       "post": {
         "tags": [
@@ -840,6 +907,65 @@
           }
         }
       },
+      "ConjunctionMatch": {
+        "type": "object",
+        "required": [
+          "satelliteA",
+          "satelliteB",
+          "closestApproachTime",
+          "minDistanceKm",
+          "relativeVelocityKms"
+        ],
+        "properties": {
+          "closestApproachTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "minDistanceKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "relativeVelocityKms": {
+            "type": "number",
+            "format": "double"
+          },
+          "satelliteA": {
+            "$ref": "#/components/schemas/SatelliteSummary"
+          },
+          "satelliteB": {
+            "$ref": "#/components/schemas/SatelliteSummary"
+          }
+        }
+      },
+      "ConjunctionSearchResponse": {
+        "type": "object",
+        "required": [
+          "searchDurationHours",
+          "maxDistanceKm",
+          "conjunctionsFound",
+          "results"
+        ],
+        "properties": {
+          "conjunctionsFound": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxDistanceKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConjunctionMatch"
+            }
+          },
+          "searchDurationHours": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "CreateSatelliteDto": {
         "type": "object",
         "required": [
@@ -1234,6 +1360,22 @@
           },
           "tle": {
             "$ref": "#/components/schemas/Tle"
+          }
+        }
+      },
+      "SatelliteSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

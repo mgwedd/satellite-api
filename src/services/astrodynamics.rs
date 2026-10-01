@@ -1,7 +1,8 @@
 use crate::error::AppError;
 use crate::models::{
-    GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint, GroundTrackResponse, IlluminationResponse,
-    LightingState, NextVisiblePassResponse, ObserverTwilightState, OverheadResponse, Satellite,
+    ConjunctionMatch, ConjunctionSearchResponse, GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint,
+    GroundTrackResponse, IlluminationResponse, LightingState, NextVisiblePassResponse,
+    ObserverTwilightState, OverheadResponse, Satellite, SatelliteSummary,
 };
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
@@ -661,3 +662,112 @@ pub fn calculate_illumination(
         estimated_visual_magnitude,
     })
 }
+
+/// Multi-threaded conjunction and satellite collision radar using Rayon `par_iter()`
+pub fn find_conjunctions(
+    satellites: &[Satellite],
+    start_time: DateTime<Utc>,
+    max_distance_km: f64,
+    duration_hours: i64,
+    step_minutes: i64,
+) -> ConjunctionSearchResponse {
+    let duration_hrs = duration_hours.clamp(1, 72);
+    let step_mins = step_minutes.clamp(1, 60);
+    let total_steps = (duration_hrs * 60) / step_mins;
+
+    let mut pairs = Vec::new();
+    for i in 0..satellites.len() {
+        for j in (i + 1)..satellites.len() {
+            pairs.push((&satellites[i], &satellites[j]));
+        }
+    }
+
+    let matches: Vec<ConjunctionMatch> = pairs
+        .par_iter()
+        .filter_map(|(sat_a, sat_b)| {
+            let line1_a = normalize_tle_line(&sat_a.tle.line_one, '1');
+            let line2_a = normalize_tle_line(&sat_a.tle.line_two, '2');
+            let elem_a = Elements::from_tle(
+                Some(sat_a.name.clone()),
+                line1_a.as_bytes(),
+                line2_a.as_bytes(),
+            )
+            .ok()?;
+            let const_a = Constants::from_elements(&elem_a).ok()?;
+            let epoch_a = DateTime::<Utc>::from_naive_utc_and_offset(elem_a.datetime, Utc);
+
+            let line1_b = normalize_tle_line(&sat_b.tle.line_one, '1');
+            let line2_b = normalize_tle_line(&sat_b.tle.line_two, '2');
+            let elem_b = Elements::from_tle(
+                Some(sat_b.name.clone()),
+                line1_b.as_bytes(),
+                line2_b.as_bytes(),
+            )
+            .ok()?;
+            let const_b = Constants::from_elements(&elem_b).ok()?;
+            let epoch_b = DateTime::<Utc>::from_naive_utc_and_offset(elem_b.datetime, Utc);
+
+            let mut min_dist_km = f64::MAX;
+            let mut closest_time = start_time;
+            let mut rel_vel_kms = 0.0;
+
+            for step in 0..=total_steps {
+                let current_time = start_time + chrono::Duration::minutes(step * step_mins);
+                let mins_a = (current_time - epoch_a).num_milliseconds() as f64 / 60000.0;
+                let mins_b = (current_time - epoch_b).num_milliseconds() as f64 / 60000.0;
+
+                if let (Ok(pred_a), Ok(pred_b)) =
+                    (const_a.propagate(mins_a), const_b.propagate(mins_b))
+                {
+                    let dx = pred_a.position[0] - pred_b.position[0];
+                    let dy = pred_a.position[1] - pred_b.position[1];
+                    let dz = pred_a.position[2] - pred_b.position[2];
+                    let dist_km = (dx * dx + dy * dy + dz * dz).sqrt();
+
+                    if dist_km < min_dist_km {
+                        min_dist_km = dist_km;
+                        closest_time = current_time;
+
+                        let dvx = pred_a.velocity[0] - pred_b.velocity[0];
+                        let dvy = pred_a.velocity[1] - pred_b.velocity[1];
+                        let dvz = pred_a.velocity[2] - pred_b.velocity[2];
+                        rel_vel_kms = (dvx * dvx + dvy * dvy + dvz * dvz).sqrt();
+                    }
+                }
+            }
+
+            if min_dist_km <= max_distance_km {
+                Some(ConjunctionMatch {
+                    satellite_a: SatelliteSummary {
+                        id: sat_a.id,
+                        name: sat_a.name.clone(),
+                    },
+                    satellite_b: SatelliteSummary {
+                        id: sat_b.id,
+                        name: sat_b.name.clone(),
+                    },
+                    closest_approach_time: closest_time,
+                    min_distance_km: min_dist_km,
+                    relative_velocity_kms: rel_vel_kms,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut sorted_matches = matches;
+    sorted_matches.sort_by(|a, b| {
+        a.min_distance_km
+            .partial_cmp(&b.min_distance_km)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    ConjunctionSearchResponse {
+        search_duration_hours: duration_hrs,
+        max_distance_km,
+        conjunctions_found: sorted_matches.len(),
+        results: sorted_matches,
+    }
+}
+
