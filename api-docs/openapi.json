@@ -1051,6 +1051,180 @@
           }
         }
       }
+    },
+    "/v1/transits/lunar": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Predict Lunar Satellite Transits",
+        "description": "Predicts satellite silhouettes crossing in front of the Lunar disk for a ground station observer.",
+        "operationId": "getLunarTransits",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "description": "Observer altitude above sea level in meters (default: 0.0)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "durationDays",
+            "in": "query",
+            "description": "Forecast window in days (default: 7 days, max: 30)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "maxAngularSeparationDeg",
+            "in": "query",
+            "description": "Maximum angular separation from Sun/Moon center in degrees (default: 0.5 degrees)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lunar transit predictions generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitPredictionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal calculation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transits/solar": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Predict Solar Satellite Transits",
+        "description": "Predicts satellite silhouettes crossing in front of the Solar disk for a ground station observer.",
+        "operationId": "getSolarTransits",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "description": "Observer altitude above sea level in meters (default: 0.0)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "durationDays",
+            "in": "query",
+            "description": "Forecast window in days (default: 7 days, max: 30)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "maxAngularSeparationDeg",
+            "in": "query",
+            "description": "Maximum angular separation from Sun/Moon center in degrees (default: 0.5 degrees)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Solar transit predictions generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitPredictionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal calculation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1910,6 +2084,97 @@
             "type": "string"
           }
         }
+      },
+      "TransitMatch": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "transitStartUtc",
+          "transitCenterUtc",
+          "transitEndUtc",
+          "transitDurationSeconds",
+          "minAngularSeparationDeg",
+          "targetElevationDeg"
+        ],
+        "properties": {
+          "minAngularSeparationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "targetElevationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "transitCenterUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "transitDurationSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "transitEndUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "transitStartUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TransitPredictionResponse": {
+        "type": "object",
+        "required": [
+          "target",
+          "observerLat",
+          "observerLon",
+          "forecastDays",
+          "transitsFound",
+          "results"
+        ],
+        "properties": {
+          "forecastDays": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "observerLat": {
+            "type": "number",
+            "format": "double"
+          },
+          "observerLon": {
+            "type": "number",
+            "format": "double"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransitMatch"
+            }
+          },
+          "target": {
+            "$ref": "#/components/schemas/TransitTarget"
+          },
+          "transitsFound": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "TransitTarget": {
+        "type": "string",
+        "enum": [
+          "Sun",
+          "Moon"
+        ]
       },
       "UpdateSatelliteDto": {
         "type": "object",

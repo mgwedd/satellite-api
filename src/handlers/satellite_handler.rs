@@ -4,7 +4,7 @@ use crate::models::{
     AnomalyDetectionRequest, AnomalyDetectionResponse, ConjunctionSearchResponse,
     CreateSatelliteDto, DopplerResponse, GroundTrackResponse, IlluminationResponse,
     ManeuverQueryParams, ManeuversResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
-    UpdateSatelliteDto,
+    TransitPredictionResponse, TransitQueryParams, TransitTarget, UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
@@ -705,5 +705,89 @@ pub async fn detect_satellite_anomalies(
     };
 
     let res = maneuver::detect_anomalies(&satellite, sigma, sma, inc)?;
+    Ok(Json(res))
+}
+
+/// Predict Solar Satellite Transits
+///
+/// Predicts satellite silhouettes crossing in front of the Solar disk for a ground station observer.
+#[utoipa::path(
+    get,
+    path = "/v1/transits/solar",
+    operation_id = "getSolarTransits",
+    params(TransitQueryParams),
+    responses(
+        (status = 200, description = "Solar transit predictions generated successfully", body = TransitPredictionResponse),
+        (status = 500, description = "Internal calculation error", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_solar_transits(
+    State(repo): State<SatelliteRepository>,
+    Query(params): Query<TransitQueryParams>,
+) -> Result<Json<TransitPredictionResponse>, AppError> {
+    let satellites = repo.list_satellites().await?;
+    let start_time = Utc::now();
+    let alt_km = params.alt.unwrap_or(0.0) / 1000.0;
+    let days = params.duration_days.unwrap_or(7).min(30);
+    let max_sep = params.max_angular_separation_deg.unwrap_or(0.5);
+
+    let res = tokio::task::spawn_blocking(move || {
+        astrodynamics::find_transits(
+            TransitTarget::Sun,
+            &satellites,
+            params.lat,
+            params.lon,
+            alt_km,
+            start_time,
+            days,
+            max_sep,
+        )
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(e.to_string()))??;
+
+    Ok(Json(res))
+}
+
+/// Predict Lunar Satellite Transits
+///
+/// Predicts satellite silhouettes crossing in front of the Lunar disk for a ground station observer.
+#[utoipa::path(
+    get,
+    path = "/v1/transits/lunar",
+    operation_id = "getLunarTransits",
+    params(TransitQueryParams),
+    responses(
+        (status = 200, description = "Lunar transit predictions generated successfully", body = TransitPredictionResponse),
+        (status = 500, description = "Internal calculation error", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_lunar_transits(
+    State(repo): State<SatelliteRepository>,
+    Query(params): Query<TransitQueryParams>,
+) -> Result<Json<TransitPredictionResponse>, AppError> {
+    let satellites = repo.list_satellites().await?;
+    let start_time = Utc::now();
+    let alt_km = params.alt.unwrap_or(0.0) / 1000.0;
+    let days = params.duration_days.unwrap_or(7).min(30);
+    let max_sep = params.max_angular_separation_deg.unwrap_or(0.5);
+
+    let res = tokio::task::spawn_blocking(move || {
+        astrodynamics::find_transits(
+            TransitTarget::Moon,
+            &satellites,
+            params.lat,
+            params.lon,
+            alt_km,
+            start_time,
+            days,
+            max_sep,
+        )
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(e.to_string()))??;
+
     Ok(Json(res))
 }
