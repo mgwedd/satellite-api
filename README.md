@@ -40,19 +40,25 @@ High-performance, low-latency Rust API for orbital satellite tracking, SGP4 prop
    cd satellite-api
    ```
 
-2. **Generate a Local JWT Bearer Token**:
-   Generate a valid JWT token for testing protected write endpoints (`POST`, `PATCH`, `DELETE`):
+2. **Generate your Custom Local RSA 2048-bit Keypair**:
+   Create a unique local RSA keypair in `.keys/` (automatically ignored by git):
+   ```bash
+   ./scripts/setup-keys.sh
+   ```
+
+3. **Generate a Signed RS256 Bearer Token**:
+   Generate an RS256 JWT token using your local RSA private key for testing write endpoints (`POST`, `PATCH`, `DELETE`):
    ```bash
    ./scripts/make-jwt.sh admin_user admin
    ```
 
-3. **Run the API server**:
+4. **Run the API server**:
    ```bash
    cargo run
    ```
-   The server will start at **`http://localhost:8080`**.
+   The server will start at **`http://localhost:8080`** and auto-detect your local `.keys/` keypair.
 
-4. **Explore Interactive Documentation & Test UI**:
+5. **Explore Interactive Documentation & Test UI**:
    - Open **[http://localhost:8080/](http://localhost:8080/)** for live Swagger UI testing.
    - Click the **Authorize** button in Swagger UI and paste your Bearer token.
    - Open **[http://localhost:8080/docs](http://localhost:8080/docs)** for Redoc interactive API reference.
@@ -63,19 +69,22 @@ High-performance, low-latency Rust API for orbital satellite tracking, SGP4 prop
 
 ### Running with Docker
 
-Build and launch the container with custom `JWT_SECRET` environment variable:
+Build the Alpine container and mount your local `.keys/` directory (or pass `RSA_PRIVATE_KEY` / `RSA_PUBLIC_KEY` environment variables):
 
 ```bash
 # Build the Docker image
 docker build -t satellite-api .
 
-# Run the container with custom JWT secret
-docker run -p 8080:8080 -e JWT_SECRET="your_production_jwt_secret" satellite-api
+# Generate your local custom RSA keypair if not already created
+./scripts/setup-keys.sh
+
+# Run the container mounting your local .keys directory
+docker run -p 8080:8080 -v "$(pwd)/.keys:/app/.keys:ro" satellite-api
 ```
 
-To generate matching tokens for the running container:
+To generate matching RS256 tokens for the running container:
 ```bash
-JWT_SECRET="your_production_jwt_secret" ./scripts/make-jwt.sh operator_user operator
+./scripts/make-jwt.sh operator_user operator
 ```
 
 ---
@@ -88,9 +97,13 @@ Set environment variables to customize runtime behavior:
 | :--- | :--- | :--- |
 | `HOST` | `0.0.0.0` | Bind host address |
 | `PORT` | `8080` | Listening HTTP port |
-| `JWT_SECRET` | `satellite_api_default_jwt_secret_key_change_in_prod` | Secret key for signing and verifying JWT Bearer tokens |
+| `RSA_PRIVATE_KEY` | *(none)* | Direct PEM string of RSA 2048 private key for signing RS256 JWT tokens |
+| `RSA_PUBLIC_KEY` | *(none)* | Direct PEM string of RSA 2048 public key for verifying RS256 JWT tokens |
+| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | Path to RSA private key PEM file |
+| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
+
 
 
 ---

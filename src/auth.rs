@@ -120,13 +120,49 @@ pub struct AuthResponse {
 }
 
 /// Returns the RSA 2048 private key PEM for signing RS256 tokens.
+/// Resolution order:
+/// 1. Direct PEM string from `RSA_PRIVATE_KEY` environment variable.
+/// 2. File path from `RSA_PRIVATE_KEY_FILE` environment variable or `.keys/rsa_private.pem`.
+/// 3. Built-in development RSA private key fallback.
 pub fn get_rsa_private_key_pem() -> String {
-    std::env::var("RSA_PRIVATE_KEY").unwrap_or_else(|_| DEV_RSA_PRIVATE_KEY_PEM.to_string())
+    if let Ok(pem) = std::env::var("RSA_PRIVATE_KEY") {
+        if !pem.trim().is_empty() {
+            return pem;
+        }
+    }
+
+    let file_path = std::env::var("RSA_PRIVATE_KEY_FILE")
+        .unwrap_or_else(|_| ".keys/rsa_private.pem".to_string());
+    if let Ok(contents) = std::fs::read_to_string(&file_path) {
+        if !contents.trim().is_empty() {
+            return contents;
+        }
+    }
+
+    DEV_RSA_PRIVATE_KEY_PEM.to_string()
 }
 
 /// Returns the RSA 2048 public key PEM for verifying RS256 signatures.
+/// Resolution order:
+/// 1. Direct PEM string from `RSA_PUBLIC_KEY` environment variable.
+/// 2. File path from `RSA_PUBLIC_KEY_FILE` environment variable or `.keys/rsa_public.pem`.
+/// 3. Built-in development RSA public key fallback.
 pub fn get_rsa_public_key_pem() -> String {
-    std::env::var("RSA_PUBLIC_KEY").unwrap_or_else(|_| DEV_RSA_PUBLIC_KEY_PEM.to_string())
+    if let Ok(pem) = std::env::var("RSA_PUBLIC_KEY") {
+        if !pem.trim().is_empty() {
+            return pem;
+        }
+    }
+
+    let file_path =
+        std::env::var("RSA_PUBLIC_KEY_FILE").unwrap_or_else(|_| ".keys/rsa_public.pem".to_string());
+    if let Ok(contents) = std::fs::read_to_string(&file_path) {
+        if !contents.trim().is_empty() {
+            return contents;
+        }
+    }
+
+    DEV_RSA_PUBLIC_KEY_PEM.to_string()
 }
 
 /// Generates a strictly RS256-signed JWT token string and Claims struct.

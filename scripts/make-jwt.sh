@@ -1,23 +1,39 @@
 #!/usr/bin/env bash
 set -e
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+cd "$DIR"
+
+# Ensure local RSA keypair exists in .keys/
+"$DIR/scripts/setup-keys.sh" > /dev/null 2>&1
+
 USERNAME="${1:-admin_user}"
 ROLE="${2:-admin}"
-SECRET="${JWT_SECRET:-satellite_api_default_jwt_secret_key_change_in_prod}"
 TTL_SECONDS="${3:-86400}"
 
+KEYS_DIR="$DIR/.keys"
+PRIV_KEY="${RSA_PRIVATE_KEY_FILE:-$KEYS_DIR/rsa_private.pem}"
+
 echo "=========================================================="
-echo "🔑 Satellite API - Local JWT Token Generator"
+echo "🔑 Satellite API - Local RS256 JWT Token Generator"
 echo "=========================================================="
-echo "  Subject  : $USERNAME"
-echo "  Role     : $ROLE"
-echo "  Lifetime : ${TTL_SECONDS}s"
+echo "  Subject   : $USERNAME"
+echo "  Role      : $ROLE"
+echo "  Algorithm : RS256 (RSA 2048-bit Asymmetric)"
+echo "  Key File  : $PRIV_KEY"
+echo "  Lifetime  : ${TTL_SECONDS}s"
 echo "=========================================================="
 
 TOKEN=$(python3 -c "
-import json, base64, hmac, hashlib, time, sys
+import json, base64, time, sys
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
-header = {'alg': 'HS256', 'typ': 'JWT'}
+key_path = '$PRIV_KEY'
+with open(key_path, 'rb') as f:
+    priv_key = serialization.load_pem_private_key(f.read(), password=None)
+
+header = {'alg': 'RS256', 'typ': 'JWT'}
 now = int(time.time())
 claims = {
     'sub': '$USERNAME',
@@ -33,14 +49,14 @@ h_b64 = b64url(json.dumps(header, separators=(',', ':')).encode('utf-8'))
 c_b64 = b64url(json.dumps(claims, separators=(',', ':')).encode('utf-8'))
 msg = f'{h_b64}.{c_b64}'.encode('ascii')
 
-sig = hmac.new('$SECRET'.encode('utf-8'), msg, hashlib.sha256).digest()
+sig = priv_key.sign(msg, padding.PKCS1v15(), hashes.SHA256())
 sig_b64 = b64url(sig)
 
 print(f'{h_b64}.{c_b64}.{sig_b64}')
 ")
 
 echo ""
-echo "Generated Bearer Token:"
+echo "Generated RS256 Bearer Token:"
 echo "$TOKEN"
 echo ""
 echo "cURL Usage Example:"
