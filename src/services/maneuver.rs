@@ -1,215 +1,204 @@
 use crate::error::AppError;
 use crate::models::{
-    AnomalyDetectionResponse, AnomalySeverity, DeltaVComponents, DetectedManeuver, ManeuverType,
-    ManeuversResponse, OrbitalParameterResidual, Satellite,
+    AnomalyDetectionResponse, AnomalyStatus, DetectedManeuver, ManeuverType, ManeuversResponse,
+    OrbitalParameterResidual, Satellite, Tle,
 };
 use crate::services::astrodynamics::normalize_tle_line;
 use chrono::{DateTime, Utc};
-use sgp4::{Constants, Elements};
-use uuid::Uuid;
+use sgp4::Elements;
 
-/// Evaluates TLE trajectory residuals across epoch steps and reconstructs impulsive/continuous maneuvers
+const MU_KM3_S2: f64 = 398_600.4418;
+
+/// Below this many residuals, median/MAD statistics are not meaningful and no verdict is given.
+pub const MIN_RESIDUALS_FOR_STATISTICS: usize = 5;
+
+/// Mean semi-major axis (km) from TLE mean motion (rev/day) by Kepler's third law.
+/// TLE mean motion is Kozai mean motion; its bias against Brouwer mean motion depends only
+/// on (a, e, i), so it is common to consecutive TLEs of one object and cancels to first
+/// order in differences.
+pub fn mean_semi_major_axis_km(mean_motion_rev_day: f64) -> f64 {
+    let n = mean_motion_rev_day * 2.0 * std::f64::consts::PI / 86_400.0;
+    (MU_KM3_S2 / (n * n)).cbrt()
+}
+
+fn parse_tle(name: &str, tle: &Tle) -> Result<Elements, AppError> {
+    let line1 = normalize_tle_line(&tle.line_one, '1');
+    let line2 = normalize_tle_line(&tle.line_two, '2');
+    Elements::from_tle(Some(name.to_string()), line1.as_bytes(), line2.as_bytes())
+        .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))
+}
+
+fn epoch(e: &Elements) -> DateTime<Utc> {
+    DateTime::<Utc>::from_naive_utc_and_offset(e.datetime, Utc)
+}
+
+/// Mean elements of every TLE in `history`, oldest first (one per epoch). For each TLE after
+/// the first:
+/// - SMA residual = a(n_obs) - a(n_pred), with n_pred from the previous TLE's own mean-motion
+///   polynomial n0 + 2(ṅ/2)Δt + 3(n̈/6)Δt² (TLE fields hold ṅ/2 and n̈/6; Δt in days);
+/// - inclination change = i_obs - i_prev.
+pub fn tle_residuals(
+    name: &str,
+    history: &[Tle],
+) -> Result<Vec<OrbitalParameterResidual>, AppError> {
+    let mut elements = history
+        .iter()
+        .map(|t| parse_tle(name, t))
+        .collect::<Result<Vec<_>, _>>()?;
+    elements.sort_by_key(|e| e.datetime);
+    elements.dedup_by_key(|e| e.datetime);
+
+    let mut out: Vec<OrbitalParameterResidual> = Vec::with_capacity(elements.len());
+    for (k, e) in elements.iter().enumerate() {
+        let a = mean_semi_major_axis_km(e.mean_motion);
+        let (sma_residual, inc_change) = match k.checked_sub(1).map(|p| &elements[p]) {
+            Some(prev) => {
+                let dt_days = (e.datetime - prev.datetime).num_milliseconds() as f64 / 86_400_000.0;
+                let n_pred = prev.mean_motion
+                    + 2.0 * prev.mean_motion_dot * dt_days
+                    + 3.0 * prev.mean_motion_ddot * dt_days * dt_days;
+                (
+                    Some(a - mean_semi_major_axis_km(n_pred)),
+                    Some(e.inclination - prev.inclination),
+                )
+            }
+            None => (None, None),
+        };
+        out.push(OrbitalParameterResidual {
+            epoch: epoch(e),
+            mean_semi_major_axis_km: a,
+            inclination_deg: e.inclination,
+            mean_motion_revday: e.mean_motion,
+            eccentricity: e.eccentricity,
+            bstar_drag: e.drag_term,
+            semi_major_axis_residual_km: sma_residual,
+            inclination_change_deg: inc_change,
+            is_anomaly: false,
+        });
+    }
+    Ok(out)
+}
+
+/// Candidate maneuvers: consecutive-TLE windows whose SMA residual or inclination change
+/// exceeds the thresholds. Only windows ending inside [start, end] are reported.
 pub fn reconstruct_maneuvers(
     satellite: &Satellite,
-    start_time: DateTime<Utc>,
-    end_time: DateTime<Utc>,
-    min_delta_v_ms: f64,
+    history: &[Tle],
+    start_time: Option<DateTime<Utc>>,
+    end_time: Option<DateTime<Utc>>,
+    min_sma_change_km: f64,
+    min_inc_change_deg: f64,
 ) -> Result<ManeuversResponse, AppError> {
-    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
-    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+    let residuals = tle_residuals(&satellite.name, history)?;
 
-    let elements = Elements::from_tle(
-        Some(satellite.name.clone()),
-        line1.as_bytes(),
-        line2.as_bytes(),
-    )
-    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
-
-    let constants = Constants::from_elements(&elements)
-        .map_err(|e| AppError::Sgp4Error(format!("Constants error: {:?}", e)))?;
-
-    let mu = 398600.4418; // km^3/s^2
-    let mean_motion_rads = elements.mean_motion * (2.0 * std::f64::consts::PI / 86400.0);
-    let semi_major_axis_km = (mu / (mean_motion_rads * mean_motion_rads)).powf(1.0 / 3.0);
-
-    let mut maneuvers = Vec::new();
-    let mut cumulative_delta_v = 0.0;
-
-    let step_hours = 6;
-    let mut current_time = start_time;
-
-    while current_time < end_time {
-        let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
-        let minutes = (current_time - epoch_dt).num_milliseconds() as f64 / 60000.0;
-
-        if let Ok(pred) = constants.propagate(minutes) {
-            let pos = pred.position;
-            let vel = pred.velocity;
-            let v_mag = (vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]).sqrt();
-            let r_mag = (pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]).sqrt();
-
-            let energy = (v_mag * v_mag) / 2.0 - mu / r_mag;
-            let osculating_sma = -mu / (2.0 * energy);
-
-            let delta_a_km = (osculating_sma - semi_major_axis_km).abs();
-            let delta_inc_deg: f64 = 0.001; // deg
-
-            let v_t_ms = (mean_motion_rads / 2.0) * delta_a_km * 1000.0;
-            let v_n_ms = v_mag * 1000.0 * (delta_inc_deg.to_radians());
-            let v_r_ms = 0.05 * v_t_ms;
-
-            let total_dv_ms = (v_r_ms * v_r_ms + v_t_ms * v_t_ms + v_n_ms * v_n_ms).sqrt();
-
-            if total_dv_ms >= min_delta_v_ms {
-                let m_type = classify_maneuver(total_dv_ms, delta_a_km, delta_inc_deg);
-                let dry_mass_kg = 500.0;
-                let isp_s = 220.0;
-                let g0 = 9.80665;
-                let fuel_used_kg = dry_mass_kg * (1.0 - (-total_dv_ms / (g0 * isp_s)).exp());
-
-                cumulative_delta_v += total_dv_ms;
-
-                maneuvers.push(DetectedManeuver {
-                    maneuver_id: Uuid::new_v4(),
-                    satellite_id: satellite.id,
-                    satellite_name: satellite.name.clone(),
-                    detected_at_epoch: current_time,
-                    total_delta_v_ms: (total_dv_ms * 1000.0).round() / 1000.0,
-                    delta_v_components: DeltaVComponents {
-                        radial_ms: (v_r_ms * 1000.0).round() / 1000.0,
-                        tangential_ms: (v_t_ms * 1000.0).round() / 1000.0,
-                        normal_ms: (v_n_ms * 1000.0).round() / 1000.0,
-                    },
-                    maneuver_type: m_type,
-                    semi_major_axis_change_km: (delta_a_km * 1000.0).round() / 1000.0,
-                    inclination_change_deg: (delta_inc_deg * 10000.0).round() / 10000.0,
-                    estimated_fuel_used_kg: Some((fuel_used_kg * 1000.0).round() / 1000.0),
-                    confidence_score: 0.95,
-                });
-            }
-        }
-
-        current_time += chrono::Duration::hours(step_hours);
-    }
+    let maneuvers: Vec<DetectedManeuver> = residuals
+        .windows(2)
+        .filter(|w| start_time.map_or(true, |s| w[1].epoch >= s))
+        .filter(|w| end_time.map_or(true, |e| w[1].epoch <= e))
+        .filter_map(|w| {
+            let da = w[1].semi_major_axis_residual_km?;
+            let di = w[1].inclination_change_deg?;
+            let sma_flag = da.abs() >= min_sma_change_km;
+            let inc_flag = di.abs() >= min_inc_change_deg;
+            let maneuver_type = match (sma_flag, inc_flag) {
+                (true, true) => ManeuverType::Combined,
+                (true, false) if da > 0.0 => ManeuverType::SemiMajorAxisIncrease,
+                (true, false) => ManeuverType::SemiMajorAxisDecrease,
+                (false, true) => ManeuverType::InclinationChange,
+                (false, false) => return None,
+            };
+            Some(DetectedManeuver {
+                window_start: w[0].epoch,
+                window_end: w[1].epoch,
+                semi_major_axis_residual_km: da,
+                inclination_change_deg: di,
+                maneuver_type,
+            })
+        })
+        .collect();
 
     Ok(ManeuversResponse {
         satellite_id: satellite.id,
         satellite_name: satellite.name.clone(),
+        tle_epochs_analyzed: residuals.len(),
         total_maneuvers_detected: maneuvers.len(),
-        cumulative_delta_v_ms: (cumulative_delta_v * 1000.0).round() / 1000.0,
         maneuvers,
     })
 }
 
-/// Evaluates statistical residuals across TLE epoch parameters to detect non-natural trajectory anomalies
+fn median(sorted: &[f64]) -> f64 {
+    let m = sorted.len() / 2;
+    if sorted.len() % 2 == 0 {
+        (sorted[m - 1] + sorted[m]) / 2.0
+    } else {
+        sorted[m]
+    }
+}
+
+/// Robust z-scores |x - median| / (1.4826 · MAD). A zero MAD gives 0 for values equal to
+/// the median and +inf otherwise.
+fn robust_z_scores(xs: &[f64]) -> Vec<f64> {
+    let mut sorted = xs.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let med = median(&sorted);
+    let mut dev: Vec<f64> = xs.iter().map(|x| (x - med).abs()).collect();
+    dev.sort_by(f64::total_cmp);
+    let scale = 1.4826 * median(&dev);
+    xs.iter()
+        .map(|x| {
+            let d = (x - med).abs();
+            if d == 0.0 {
+                0.0
+            } else {
+                d / scale
+            }
+        })
+        .collect()
+}
+
+/// Flags residuals that are both outliers against this object's own residual history
+/// (robust z-score >= threshold_sigma) and larger than the absolute thresholds.
 pub fn detect_anomalies(
     satellite: &Satellite,
-    threshold_sigma: Option<f64>,
-    min_sma_change_km: Option<f64>,
-    min_inc_change_deg: Option<f64>,
+    history: &[Tle],
+    threshold_sigma: f64,
+    min_sma_change_km: f64,
+    min_inc_change_deg: f64,
 ) -> Result<AnomalyDetectionResponse, AppError> {
-    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
-    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+    let mut residuals = tle_residuals(&satellite.name, history)?;
+    let pairs: Vec<(f64, f64)> = residuals
+        .iter()
+        .filter_map(|r| Some((r.semi_major_axis_residual_km?, r.inclination_change_deg?)))
+        .collect();
 
-    let elements = Elements::from_tle(
-        Some(satellite.name.clone()),
-        line1.as_bytes(),
-        line2.as_bytes(),
-    )
-    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
-
-    let sigma_limit = threshold_sigma.unwrap_or(3.0);
-    let min_sma = min_sma_change_km.unwrap_or(0.1);
-    let min_inc = min_inc_change_deg.unwrap_or(0.005);
-
-    let mu = 398600.4418;
-    let mean_motion_rads = elements.mean_motion * (2.0 * std::f64::consts::PI / 86400.0);
-    let base_sma_km = (mu / (mean_motion_rads * mean_motion_rads)).powf(1.0 / 3.0);
-    let base_inc_deg = elements.inclination.to_degrees();
-    let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
-
-    let mut residual_history = Vec::new();
-    let mut anomaly_count = 0;
-    let mut max_sigma: f64 = 0.0;
-
-    for i in 0..10 {
-        let epoch = epoch_dt - chrono::Duration::days(10 - i);
-        let delta_sma = if i == 7 {
-            0.85
-        } else {
-            0.02 * (i as f64 - 5.0)
-        };
-        let delta_inc = if i == 7 { 0.02 } else { 0.001 * (i as f64) };
-
-        let current_sma = base_sma_km + delta_sma;
-        let current_inc = base_inc_deg + delta_inc;
-
-        let sigma = (delta_sma.abs() / min_sma).max(delta_inc.abs() / min_inc);
-        if sigma > max_sigma {
-            max_sigma = sigma;
-        }
-
-        let is_anomaly = sigma >= sigma_limit;
-        if is_anomaly {
-            anomaly_count += 1;
-        }
-
-        residual_history.push(OrbitalParameterResidual {
-            epoch,
-            semi_major_axis_km: (current_sma * 100.0).round() / 100.0,
-            inclination_deg: (current_inc * 1000.0).round() / 1000.0,
-            mean_motion_revday: elements.mean_motion,
-            eccentricity: elements.eccentricity,
-            bstar_drag: elements.drag_term,
-            delta_semi_major_axis_km: (delta_sma * 100.0).round() / 100.0,
-            delta_inclination_deg: (delta_inc * 1000.0).round() / 1000.0,
-            is_anomaly,
+    if pairs.len() < MIN_RESIDUALS_FOR_STATISTICS {
+        return Ok(AnomalyDetectionResponse {
+            satellite_id: satellite.id,
+            satellite_name: satellite.name.clone(),
+            status: AnomalyStatus::InsufficientData,
+            anomalies_detected: 0,
+            residual_history: residuals,
         });
     }
 
-    let severity = if anomaly_count >= 2 || max_sigma >= 5.0 {
-        AnomalySeverity::Critical
-    } else if anomaly_count >= 1 || max_sigma >= sigma_limit {
-        AnomalySeverity::Warning
-    } else {
-        AnomalySeverity::Nominal
-    };
-
-    let recommendation = match severity {
-        AnomalySeverity::Critical => {
-            "CRITICAL: Non-natural trajectory discontinuity detected. Perform immediate maneuver reconstruction & conjunction risk re-assessment.".to_string()
-        }
-        AnomalySeverity::Warning => {
-            "WARNING: Minor orbital parameter residual deviation. Continue tracking next TLE epochs.".to_string()
-        }
-        AnomalySeverity::Nominal => {
-            "NOMINAL: Orbital parameters follow natural Keplerian/J2 secular decay models without maneuver signatures.".to_string()
-        }
-    };
+    let z_sma = robust_z_scores(&pairs.iter().map(|p| p.0).collect::<Vec<_>>());
+    let z_inc = robust_z_scores(&pairs.iter().map(|p| p.1).collect::<Vec<_>>());
+    // residuals[0] has no predecessor, so pairs[k] belongs to residuals[k + 1].
+    for (k, (da, di)) in pairs.iter().enumerate() {
+        residuals[k + 1].is_anomaly = (da.abs() >= min_sma_change_km && z_sma[k] >= threshold_sigma)
+            || (di.abs() >= min_inc_change_deg && z_inc[k] >= threshold_sigma);
+    }
+    let anomalies_detected = residuals.iter().filter(|r| r.is_anomaly).count();
 
     Ok(AnomalyDetectionResponse {
         satellite_id: satellite.id,
         satellite_name: satellite.name.clone(),
-        severity,
-        anomalies_detected: anomaly_count,
-        max_residual_sigma: (max_sigma * 100.0).round() / 100.0,
-        residual_history,
-        recommendation,
+        status: if anomalies_detected > 0 {
+            AnomalyStatus::AnomalyDetected
+        } else {
+            AnomalyStatus::Nominal
+        },
+        anomalies_detected,
+        residual_history: residuals,
     })
-}
-
-fn classify_maneuver(total_dv: f64, delta_a_km: f64, delta_inc_deg: f64) -> ManeuverType {
-    if delta_inc_deg > 0.05 {
-        ManeuverType::InclinationChange
-    } else if delta_a_km > 2.0 {
-        ManeuverType::OrbitRaising
-    } else if delta_a_km < -5.0 {
-        ManeuverType::DeorbitBurn
-    } else if total_dv < 3.0 {
-        ManeuverType::Stationkeeping
-    } else if total_dv >= 3.0 {
-        ManeuverType::CollisionAvoidance
-    } else {
-        ManeuverType::Unknown
-    }
 }
