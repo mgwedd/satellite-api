@@ -554,6 +554,65 @@
         ]
       }
     },
+    "/v1/satellites/{id}/detect-anomalies": {
+      "post": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Detect Satellite Trajectory Anomalies",
+        "description": "Performs statistical residual analysis across TLE epoch parameters to identify non-natural trajectory anomalies.",
+        "operationId": "detectSatelliteAnomalies",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AnomalyDetectionRequest"
+                  }
+                ],
+                "nullable": true
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "description": "Anomaly detection report generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnomalyDetectionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/satellites/{id}/doppler": {
       "get": {
         "tags": [
@@ -833,6 +892,80 @@
         }
       }
     },
+    "/v1/satellites/{id}/maneuvers": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Reconstruct Satellite Orbital Maneuvers",
+        "description": "Detects trajectory step discontinuities and calculates delta-V vector components, fuel consumption, and maneuver classification.",
+        "operationId": "getSatelliteManeuvers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          },
+          {
+            "name": "minDeltaVMs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orbital maneuvers reconstructed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManeuversResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/satellites/{id}/next-visible": {
       "get": {
         "tags": [
@@ -922,6 +1055,75 @@
   },
   "components": {
     "schemas": {
+      "AnomalyDetectionRequest": {
+        "type": "object",
+        "properties": {
+          "minInclinationChangeDeg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "minSmaChangeKm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "thresholdSigma": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "AnomalyDetectionResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "severity",
+          "anomaliesDetected",
+          "maxResidualSigma",
+          "residualHistory",
+          "recommendation"
+        ],
+        "properties": {
+          "anomaliesDetected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxResidualSigma": {
+            "type": "number",
+            "format": "double"
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "residualHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrbitalParameterResidual"
+            }
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AnomalySeverity"
+          }
+        }
+      },
+      "AnomalySeverity": {
+        "type": "string",
+        "enum": [
+          "Nominal",
+          "Warning",
+          "Critical"
+        ]
+      },
       "AuthResponse": {
         "type": "object",
         "description": "Response returned upon successful RS256 JWT token generation.",
@@ -1078,6 +1280,90 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "DeltaVComponents": {
+        "type": "object",
+        "required": [
+          "radialMs",
+          "tangentialMs",
+          "normalMs"
+        ],
+        "properties": {
+          "normalMs": {
+            "type": "number",
+            "format": "double",
+            "description": "Normal / cross-track component of delta-V vector in m/s (out of orbital plane)"
+          },
+          "radialMs": {
+            "type": "number",
+            "format": "double",
+            "description": "Radial component of delta-V vector in m/s (along position vector)"
+          },
+          "tangentialMs": {
+            "type": "number",
+            "format": "double",
+            "description": "Tangential / along-track component of delta-V vector in m/s (along velocity direction)"
+          }
+        }
+      },
+      "DetectedManeuver": {
+        "type": "object",
+        "required": [
+          "maneuverId",
+          "satelliteId",
+          "satelliteName",
+          "detectedAtEpoch",
+          "totalDeltaVMs",
+          "deltaVComponents",
+          "maneuverType",
+          "semiMajorAxisChangeKm",
+          "inclinationChangeDeg",
+          "confidenceScore"
+        ],
+        "properties": {
+          "confidenceScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaVComponents": {
+            "$ref": "#/components/schemas/DeltaVComponents"
+          },
+          "detectedAtEpoch": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estimatedFuelUsedKg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "inclinationChangeDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "maneuverId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "maneuverType": {
+            "$ref": "#/components/schemas/ManeuverType"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "semiMajorAxisChangeKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalDeltaVMs": {
+            "type": "number",
+            "format": "double"
           }
         }
       },
@@ -1342,6 +1628,50 @@
           }
         }
       },
+      "ManeuverType": {
+        "type": "string",
+        "enum": [
+          "OrbitRaising",
+          "InclinationChange",
+          "Stationkeeping",
+          "CollisionAvoidance",
+          "DeorbitBurn",
+          "Unknown"
+        ]
+      },
+      "ManeuversResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "totalManeuversDetected",
+          "cumulativeDeltaVMs",
+          "maneuvers"
+        ],
+        "properties": {
+          "cumulativeDeltaVMs": {
+            "type": "number",
+            "format": "double"
+          },
+          "maneuvers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DetectedManeuver"
+            }
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "totalManeuversDetected": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "NextVisiblePassResponse": {
         "type": "object",
         "required": [
@@ -1387,6 +1717,57 @@
           "AstronomicalTwilight",
           "Night"
         ]
+      },
+      "OrbitalParameterResidual": {
+        "type": "object",
+        "required": [
+          "epoch",
+          "semiMajorAxisKm",
+          "inclinationDeg",
+          "meanMotionRevday",
+          "eccentricity",
+          "bstarDrag",
+          "deltaSemiMajorAxisKm",
+          "deltaInclinationDeg",
+          "isAnomaly"
+        ],
+        "properties": {
+          "bstarDrag": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaInclinationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaSemiMajorAxisKm": {
+            "type": "number",
+            "format": "double"
+          },
+          "eccentricity": {
+            "type": "number",
+            "format": "double"
+          },
+          "epoch": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "inclinationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "isAnomaly": {
+            "type": "boolean"
+          },
+          "meanMotionRevday": {
+            "type": "number",
+            "format": "double"
+          },
+          "semiMajorAxisKm": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "OverheadResponse": {
         "type": "object",

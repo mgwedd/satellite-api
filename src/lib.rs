@@ -50,6 +50,8 @@ impl Modify for SecurityAddon {
         handlers::satellite_handler::get_ground_track,
         handlers::satellite_handler::get_satellite_illumination,
         handlers::satellite_handler::get_satellite_doppler,
+        handlers::satellite_handler::get_satellite_maneuvers,
+        handlers::satellite_handler::detect_satellite_anomalies,
         handlers::satellite_handler::search_conjunctions,
     ),
     components(
@@ -72,6 +74,14 @@ impl Modify for SecurityAddon {
             models::LightingState,
             models::ObserverTwilightState,
             models::DopplerResponse,
+            models::ManeuversResponse,
+            models::DetectedManeuver,
+            models::DeltaVComponents,
+            models::ManeuverType,
+            models::AnomalyDetectionRequest,
+            models::AnomalyDetectionResponse,
+            models::AnomalySeverity,
+            models::OrbitalParameterResidual,
             models::ConjunctionSearchResponse,
             models::ConjunctionMatch,
             models::SatelliteSummary,
@@ -121,6 +131,14 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .route(
             "/satellites/:id/doppler",
             get(handlers::get_satellite_doppler),
+        )
+        .route(
+            "/satellites/:id/maneuvers",
+            get(handlers::get_satellite_maneuvers),
+        )
+        .route(
+            "/satellites/:id/detect-anomalies",
+            post(handlers::detect_satellite_anomalies),
         )
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);

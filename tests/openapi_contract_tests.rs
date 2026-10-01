@@ -76,6 +76,16 @@ fn test_openapi_schema_static_contract() {
         "Missing or invalid operationId for GET /v1/satellites/{{id}}/doppler"
     );
     assert!(
+        paths["/v1/satellites/{id}/maneuvers"]["get"]["operationId"].as_str()
+            == Some("getSatelliteManeuvers"),
+        "Missing or invalid operationId for GET /v1/satellites/{{id}}/maneuvers"
+    );
+    assert!(
+        paths["/v1/satellites/{id}/detect-anomalies"]["post"]["operationId"].as_str()
+            == Some("detectSatelliteAnomalies"),
+        "Missing or invalid operationId for POST /v1/satellites/{{id}}/detect-anomalies"
+    );
+    assert!(
         paths["/v1/conjunctions/search"]["get"]["operationId"].as_str()
             == Some("searchConjunctions"),
         "Missing or invalid operationId for GET /v1/conjunctions/search"
@@ -106,6 +116,14 @@ fn test_openapi_schema_static_contract() {
         "LightingState",
         "ObserverTwilightState",
         "DopplerResponse",
+        "ManeuversResponse",
+        "DetectedManeuver",
+        "DeltaVComponents",
+        "ManeuverType",
+        "AnomalyDetectionRequest",
+        "AnomalyDetectionResponse",
+        "AnomalySeverity",
+        "OrbitalParameterResidual",
         "ConjunctionSearchResponse",
         "ConjunctionMatch",
         "SatelliteSummary",
