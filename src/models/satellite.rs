@@ -179,3 +179,15 @@ pub struct ConjunctionSearchResponse {
     pub conjunctions_found: usize,
     pub results: Vec<ConjunctionMatch>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DopplerResponse {
+    pub satellite_id: Uuid,
+    pub satellite_name: String,
+    pub center_freq_hz: f64,
+    pub range_rate_kms: f64,
+    pub doppler_shift_hz: f64,
+    pub corrected_freq_hz: f64,
+    pub signal_direction: String,
+}

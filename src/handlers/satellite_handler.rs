@@ -1,8 +1,8 @@
 use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
-    ConjunctionSearchResponse, CreateSatelliteDto, GroundTrackResponse, IlluminationResponse,
-    NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
+    ConjunctionSearchResponse, CreateSatelliteDto, DopplerResponse, GroundTrackResponse,
+    IlluminationResponse, NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
@@ -559,6 +559,77 @@ pub async fn search_conjunctions(
             .map_err(|e| e.to_string())?;
 
             Ok(conjunction_res)
+        })
+        .await
+        .map_err(AppError::InternalServerError)?;
+
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct DopplerQueryParams {
+    /// Nominal satellite transmitter frequency in Hertz (e.g. 437500000 for 437.5 MHz UHF)
+    pub center_freq_hz: f64,
+    /// Observer latitude in decimal degrees (-90.0 to 90.0)
+    pub lat: f64,
+    /// Observer longitude in decimal degrees (-180.0 to 180.0)
+    pub lon: f64,
+    /// Observer altitude above sea level in km (default: 0.0)
+    pub alt_km: Option<f64>,
+    /// UTC timestamp for calculation epoch (defaults to current time if omitted)
+    pub time: Option<DateTime<Utc>>,
+}
+
+/// Get Satellite RF Doppler Shift
+///
+/// Computes range rate (km/s), Doppler frequency shift (Hz), and corrected transmitter frequency for ground station tracking.
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}/doppler",
+    operation_id = "getSatelliteDoppler",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier"),
+        DopplerQueryParams
+    ),
+    responses(
+        (status = 200, description = "Doppler shift computed successfully", body = DopplerResponse),
+        (status = 404, description = "Satellite not found", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_satellite_doppler(
+    State(repo): State<SatelliteRepository>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<DopplerQueryParams>,
+) -> Result<Json<DopplerResponse>, AppError> {
+    let satellite = repo.get_satellite_by_id(id).await?;
+    let time = params.time.unwrap_or_else(Utc::now);
+    let alt_km = params.alt_km.unwrap_or(0.0);
+
+    let time_bucket = time.timestamp() / 10;
+    let cache_key = format!(
+        "doppler:{}:{:.2}:{:.2}:{:.2}:{:.1}:{}",
+        id, params.center_freq_hz, params.lat, params.lon, alt_km, time_bucket
+    );
+
+    let res = repo
+        .cache
+        .get_or_insert_with(&cache_key, || async move {
+            let sat_clone = satellite.clone();
+            let doppler_res = tokio::task::spawn_blocking(move || {
+                astrodynamics::calculate_doppler_shift(
+                    &sat_clone,
+                    params.center_freq_hz,
+                    params.lat,
+                    params.lon,
+                    alt_km,
+                    time,
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            doppler_res.map_err(|e| e.to_string())
         })
         .await
         .map_err(AppError::InternalServerError)?;

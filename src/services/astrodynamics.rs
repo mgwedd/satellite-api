@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::models::{
-    ConjunctionMatch, ConjunctionSearchResponse, GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint,
-    GroundTrackResponse, IlluminationResponse, LightingState, NextVisiblePassResponse,
-    ObserverTwilightState, OverheadResponse, Satellite, SatelliteSummary,
+    ConjunctionMatch, ConjunctionSearchResponse, DopplerResponse, GeoJsonFeature, GeoJsonGeometry,
+    GroundTrackPoint, GroundTrackResponse, IlluminationResponse, LightingState,
+    NextVisiblePassResponse, ObserverTwilightState, OverheadResponse, Satellite, SatelliteSummary,
 };
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
@@ -769,4 +769,88 @@ pub fn find_conjunctions(
         conjunctions_found: sorted_matches.len(),
         results: sorted_matches,
     }
+}
+
+/// Computes range rate (km/s) and real-time RF Doppler frequency shift (Hz) for a ground observer
+pub fn calculate_doppler_shift(
+    satellite: &Satellite,
+    center_freq_hz: f64,
+    lat: f64,
+    lon: f64,
+    alt_km: f64,
+    time: DateTime<Utc>,
+) -> Result<DopplerResponse, AppError> {
+    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
+    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+
+    let elements = Elements::from_tle(
+        Some(satellite.name.clone()),
+        line1.as_bytes(),
+        line2.as_bytes(),
+    )
+    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
+
+    let constants = Constants::from_elements(&elements)
+        .map_err(|e| AppError::Sgp4Error(format!("Constants error: {:?}", e)))?;
+
+    let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
+    let minutes_since_epoch = (time - epoch_dt).num_milliseconds() as f64 / 60000.0;
+
+    let prediction: Prediction = constants
+        .propagate(minutes_since_epoch)
+        .map_err(|e| AppError::Sgp4Error(format!("SGP4 propagation error: {:?}", e)))?;
+
+    let lst = calculate_local_sidereal_time(time, lon);
+    let sat_ecf = eci_to_ecf(prediction.position, lst);
+    let sat_vel_ecf = eci_to_ecf_velocity(prediction.position, prediction.velocity, lst);
+
+    let lat_rad = lat.to_radians();
+    let lon_rad = lon.to_radians();
+
+    let re = 6378.137; // WGS84 Equatorial radius (km)
+    let f = 1.0 / 298.257223563;
+    let c_flat = 1.0 / (1.0 - (2.0 * f - f * f) * lat_rad.sin() * lat_rad.sin()).sqrt();
+
+    let obs_x = (re * c_flat + alt_km) * lat_rad.cos() * lon_rad.cos();
+    let obs_y = (re * c_flat + alt_km) * lat_rad.cos() * lon_rad.sin();
+    let obs_z = (re * (c_flat * (1.0 - f) * (1.0 - f)) + alt_km) * lat_rad.sin();
+
+    // Range vector in ECF
+    let rx = sat_ecf[0] - obs_x;
+    let ry = sat_ecf[1] - obs_y;
+    let rz = sat_ecf[2] - obs_z;
+    let range_km = (rx * rx + ry * ry + rz * rz).sqrt();
+
+    if range_km < 1e-6 {
+        return Err(AppError::InternalServerError(
+            "Zero range calculation".to_string(),
+        ));
+    }
+
+    // Range rate (dot product of range vector and satellite relative velocity vector in ECF)
+    let range_rate_kms =
+        (rx * sat_vel_ecf[0] + ry * sat_vel_ecf[1] + rz * sat_vel_ecf[2]) / range_km;
+
+    // Speed of light in km/s
+    let c_kms = 299_792.458;
+    let doppler_shift_hz = -center_freq_hz * (range_rate_kms / c_kms);
+    let corrected_freq_hz = center_freq_hz + doppler_shift_hz;
+
+    let signal_direction = if range_rate_kms < -1e-5 {
+        "Approaching (Blue Shift)".to_string()
+    } else if range_rate_kms > 1e-5 {
+        "Receding (Red Shift)".to_string()
+    } else {
+        "Stationary / Zero Doppler".to_string()
+    };
+
+    Ok(DopplerResponse {
+        satellite_id: satellite.id,
+        satellite_name: satellite.name.clone(),
+        center_freq_hz,
+        range_rate_kms,
+        doppler_shift_hz,
+        corrected_freq_hz,
+        signal_direction,
+    })
 }

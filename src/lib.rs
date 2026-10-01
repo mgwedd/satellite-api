@@ -49,6 +49,7 @@ impl Modify for SecurityAddon {
         handlers::satellite_handler::get_next_visible,
         handlers::satellite_handler::get_ground_track,
         handlers::satellite_handler::get_satellite_illumination,
+        handlers::satellite_handler::get_satellite_doppler,
         handlers::satellite_handler::search_conjunctions,
     ),
     components(
@@ -70,6 +71,7 @@ impl Modify for SecurityAddon {
             models::IlluminationResponse,
             models::LightingState,
             models::ObserverTwilightState,
+            models::DopplerResponse,
             models::ConjunctionSearchResponse,
             models::ConjunctionMatch,
             models::SatelliteSummary,
@@ -115,6 +117,10 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .route(
             "/satellites/:id/illumination",
             get(handlers::get_satellite_illumination),
+        )
+        .route(
+            "/satellites/:id/doppler",
+            get(handlers::get_satellite_doppler),
         )
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);
