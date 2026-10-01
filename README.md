@@ -6,7 +6,7 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 [![Axum](https://img.shields.io/badge/Axum-0.7-blue.svg)](https://github.com/tokio-rs/axum)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-green.svg)](http://localhost:3000/swagger-ui)
 [![Fern SDKs](https://img.shields.io/badge/Fern-SDKs-purple.svg)](https://buildwithfern.com/)
-[![License](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE.MD)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-brightgreen.svg)](#-license)
 
 ---
 
@@ -278,4 +278,9 @@ cargo test --test openapi_contract_tests
 
 ## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE.MD).
+Licensed under either of:
+
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.

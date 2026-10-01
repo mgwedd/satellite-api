@@ -3,6 +3,7 @@ name = "astrea-sda-api"
 version = "0.1.0"
 edition = "2021"
 authors = ["Michael Wedd"]
+license = "MIT OR Apache-2.0"
 description = "A high-performance Rust API for Space Domain Awareness (SDA), satellite tracking, SGP4 propagation, and visibility prediction"
 
 [dependencies]
