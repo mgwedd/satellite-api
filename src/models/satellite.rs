@@ -145,3 +145,37 @@ pub struct IlluminationResponse {
     pub is_visibly_observable: bool,
     pub estimated_visual_magnitude: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConjunctionSearchQuery {
+    pub max_distance_km: Option<f64>,
+    pub duration_hours: Option<i64>,
+    pub step_minutes: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SatelliteSummary {
+    pub id: Uuid,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConjunctionMatch {
+    pub satellite_a: SatelliteSummary,
+    pub satellite_b: SatelliteSummary,
+    pub closest_approach_time: DateTime<Utc>,
+    pub min_distance_km: f64,
+    pub relative_velocity_kms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConjunctionSearchResponse {
+    pub search_duration_hours: i64,
+    pub max_distance_km: f64,
+    pub conjunctions_found: usize,
+    pub results: Vec<ConjunctionMatch>,
+}

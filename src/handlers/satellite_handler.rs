@@ -1,8 +1,8 @@
 use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
-    CreateSatelliteDto, GroundTrackResponse, IlluminationResponse, NextVisiblePassResponse,
-    OverheadResponse, Satellite, UpdateSatelliteDto,
+    ConjunctionSearchResponse, CreateSatelliteDto, GroundTrackResponse, IlluminationResponse,
+    NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
@@ -492,6 +492,73 @@ pub async fn get_satellite_illumination(
             .map_err(|e| e.to_string())?;
 
             illum_res.map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(AppError::InternalServerError)?;
+
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ConjunctionSearchQueryParams {
+    /// Maximum threshold distance in km between satellites to trigger a conjunction match (default: 10.0 km)
+    pub max_distance_km: Option<f64>,
+    /// Forecast window forward in hours (default: 24 hrs, max: 72)
+    pub duration_hours: Option<i64>,
+    /// Step interval in minutes (default: 1 min, max: 60)
+    pub step_minutes: Option<i64>,
+}
+
+/// Search Conjunctions & Satellite Collision Radar
+///
+/// Evaluates close-approach orbital conjunctions across all active satellites using Rayon parallel execution.
+#[utoipa::path(
+    get,
+    path = "/v1/conjunctions/search",
+    operation_id = "searchConjunctions",
+    params(ConjunctionSearchQueryParams),
+    responses(
+        (status = 200, description = "Conjunction radar search completed successfully", body = ConjunctionSearchResponse),
+        (status = 500, description = "Internal calculation error", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn search_conjunctions(
+    State(repo): State<SatelliteRepository>,
+    Query(params): Query<ConjunctionSearchQueryParams>,
+) -> Result<Json<ConjunctionSearchResponse>, AppError> {
+    let satellites = repo.list_satellites().await?;
+    let start_time = Utc::now();
+    let max_distance_km = params.max_distance_km.unwrap_or(10.0);
+    let duration_hours = params.duration_hours.unwrap_or(24);
+    let step_minutes = params.step_minutes.unwrap_or(1);
+
+    let time_bucket = start_time.timestamp() / 60;
+    let cache_key = format!(
+        "conjunctions:{}:{:.1}:{}:{}:{}",
+        satellites.len(),
+        max_distance_km,
+        duration_hours,
+        step_minutes,
+        time_bucket
+    );
+
+    let res = repo
+        .cache
+        .get_or_insert_with(&cache_key, || async move {
+            let conjunction_res = tokio::task::spawn_blocking(move || {
+                astrodynamics::find_conjunctions(
+                    &satellites,
+                    start_time,
+                    max_distance_km,
+                    duration_hours,
+                    step_minutes,
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            Ok(conjunction_res)
         })
         .await
         .map_err(AppError::InternalServerError)?;

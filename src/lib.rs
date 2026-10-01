@@ -49,6 +49,7 @@ impl Modify for SecurityAddon {
         handlers::satellite_handler::get_next_visible,
         handlers::satellite_handler::get_ground_track,
         handlers::satellite_handler::get_satellite_illumination,
+        handlers::satellite_handler::search_conjunctions,
     ),
     components(
         schemas(
@@ -69,6 +70,9 @@ impl Modify for SecurityAddon {
             models::IlluminationResponse,
             models::LightingState,
             models::ObserverTwilightState,
+            models::ConjunctionSearchResponse,
+            models::ConjunctionMatch,
+            models::SatelliteSummary,
             handlers::satellite_handler::PipelineSyncResponse,
             pagination::PaginationMeta,
             pagination::PaginatedResponseSatellite,
@@ -99,6 +103,7 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
                 .delete(handlers::delete_satellite),
         )
         .route("/astrodynamics/overhead", get(handlers::get_overhead))
+        .route("/conjunctions/search", get(handlers::search_conjunctions))
         .route(
             "/satellites/:id/next-visible",
             get(handlers::get_next_visible),
