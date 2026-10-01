@@ -3,6 +3,7 @@ use crate::models::{
     ConjunctionMatch, ConjunctionSearchResponse, DopplerResponse, GeoJsonFeature, GeoJsonGeometry,
     GroundTrackPoint, GroundTrackResponse, IlluminationResponse, LightingState,
     NextVisiblePassResponse, ObserverTwilightState, OverheadResponse, Satellite, SatelliteSummary,
+    TransitMatch, TransitPredictionResponse, TransitTarget,
 };
 use chrono::{DateTime, Utc};
 use rayon::prelude::*;
@@ -893,5 +894,158 @@ pub fn calculate_doppler_shift(
         doppler_shift_hz,
         corrected_freq_hz,
         signal_direction,
+    })
+}
+
+/// Computes low-precision geocentric Moon position vector [X, Y, Z] in ECI (km) using Meeus Chapter 47 algorithm
+pub fn calculate_lunar_position_eci(time: DateTime<Utc>) -> [f64; 3] {
+    let jd = julian_date(time);
+    let d = jd - 2451545.0;
+
+    // Mean longitude of the Moon in degrees
+    let l_prime = (218.316 + 13.176396 * d) % 360.0;
+    // Mean anomaly of the Moon in degrees
+    let m_prime = (134.963 + 13.064993 * d) % 360.0;
+    // Argument of latitude of the Moon in degrees
+    let f = (93.272 + 13.229350 * d) % 360.0;
+
+    let m_prime_rad = m_prime.to_radians();
+    let f_rad = f.to_radians();
+
+    // Ecliptic longitude & latitude in radians
+    let lambda = (l_prime + 6.289 * m_prime_rad.sin()).to_radians();
+    let beta = (5.128 * f_rad.sin()).to_radians();
+    // Distance in km
+    let r_km = 385_001.0 - 20_905.0 * m_prime_rad.cos();
+
+    // Obliquity of the ecliptic (~23.439 degrees)
+    let eps_rad = 23.4393_f64.to_radians();
+
+    let x = r_km * beta.cos() * lambda.cos();
+    let y = r_km * (beta.cos() * lambda.sin() * eps_rad.cos() - beta.sin() * eps_rad.sin());
+    let z = r_km * (beta.cos() * lambda.sin() * eps_rad.sin() + beta.sin() * eps_rad.cos());
+
+    [x, y, z]
+}
+
+/// Multi-threaded evaluation of solar or lunar satellite transits across a multi-day forecast window
+#[allow(clippy::too_many_arguments)]
+pub fn find_transits(
+    target: TransitTarget,
+    satellites: &[Satellite],
+    lat: f64,
+    lon: f64,
+    alt_km: f64,
+    start_time: DateTime<Utc>,
+    duration_days: usize,
+    max_angular_separation_deg: f64,
+) -> Result<TransitPredictionResponse, AppError> {
+    let forecast_hours = duration_days * 24;
+    let total_minutes = forecast_hours * 60;
+
+    let results: Vec<TransitMatch> = satellites
+        .par_iter()
+        .flat_map(|sat| {
+            let mut matches = Vec::new();
+            let line1 = normalize_tle_line(&sat.tle.line_one, '1');
+            let line2 = normalize_tle_line(&sat.tle.line_two, '2');
+
+            let elements = match Elements::from_tle(
+                Some(sat.name.clone()),
+                line1.as_bytes(),
+                line2.as_bytes(),
+            ) {
+                Ok(e) => e,
+                Err(_) => return matches,
+            };
+            let constants = match Constants::from_elements(&elements) {
+                Ok(c) => c,
+                Err(_) => return matches,
+            };
+            let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
+
+            for min_step in 0..total_minutes {
+                let current_time = start_time + chrono::Duration::minutes(min_step as i64);
+                let minutes_since_epoch =
+                    (current_time - epoch_dt).num_milliseconds() as f64 / 60000.0;
+
+                let prediction = match constants.propagate(minutes_since_epoch) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+
+                let gmst = calculate_local_sidereal_time(current_time, 0.0);
+                let sat_ecf = eci_to_ecf(prediction.position, gmst);
+                let sat_look = ecf_to_look_angles(lat, lon, alt_km, sat_ecf);
+
+                if sat_look.elevation <= 0.0 {
+                    continue;
+                }
+
+                let target_ecf = match target {
+                    TransitTarget::Sun => {
+                        let sun_eci = calculate_sun_position_eci(current_time);
+                        eci_to_ecf(sun_eci, gmst)
+                    }
+                    TransitTarget::Moon => {
+                        let moon_eci = calculate_lunar_position_eci(current_time);
+                        eci_to_ecf(moon_eci, gmst)
+                    }
+                };
+                let target_look = ecf_to_look_angles(lat, lon, alt_km, target_ecf);
+
+                if target_look.elevation <= 0.0 {
+                    continue;
+                }
+
+                let sat_az_rad = sat_look.azimuth.to_radians();
+                let sat_el_rad = sat_look.elevation.to_radians();
+                let u_sat = [
+                    sat_el_rad.cos() * sat_az_rad.sin(),
+                    sat_el_rad.cos() * sat_az_rad.cos(),
+                    sat_el_rad.sin(),
+                ];
+
+                let tgt_az_rad = target_look.azimuth.to_radians();
+                let tgt_el_rad = target_look.elevation.to_radians();
+                let u_tgt = [
+                    tgt_el_rad.cos() * tgt_az_rad.sin(),
+                    tgt_el_rad.cos() * tgt_az_rad.cos(),
+                    tgt_el_rad.sin(),
+                ];
+
+                let dot = (u_sat[0] * u_tgt[0] + u_sat[1] * u_tgt[1] + u_sat[2] * u_tgt[2])
+                    .clamp(-1.0, 1.0);
+                let sep_deg = dot.acos().to_degrees();
+
+                if sep_deg <= max_angular_separation_deg {
+                    let transit_center = current_time;
+                    let transit_start = current_time - chrono::Duration::seconds(1);
+                    let transit_end = current_time + chrono::Duration::seconds(1);
+                    let duration_sec = 2.0;
+
+                    matches.push(TransitMatch {
+                        satellite_id: sat.id,
+                        satellite_name: sat.name.clone(),
+                        transit_start_utc: transit_start,
+                        transit_center_utc: transit_center,
+                        transit_end_utc: transit_end,
+                        transit_duration_seconds: duration_sec,
+                        min_angular_separation_deg: (sep_deg * 1000.0).round() / 1000.0,
+                        target_elevation_deg: (target_look.elevation * 100.0).round() / 100.0,
+                    });
+                }
+            }
+            matches
+        })
+        .collect();
+
+    Ok(TransitPredictionResponse {
+        target,
+        observer_lat: lat,
+        observer_lon: lon,
+        forecast_days: duration_days,
+        transits_found: results.len(),
+        results,
     })
 }

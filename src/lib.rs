@@ -52,6 +52,8 @@ impl Modify for SecurityAddon {
         handlers::satellite_handler::get_satellite_doppler,
         handlers::satellite_handler::get_satellite_maneuvers,
         handlers::satellite_handler::detect_satellite_anomalies,
+        handlers::satellite_handler::get_solar_transits,
+        handlers::satellite_handler::get_lunar_transits,
         handlers::satellite_handler::search_conjunctions,
     ),
     components(
@@ -82,6 +84,9 @@ impl Modify for SecurityAddon {
             models::AnomalyDetectionResponse,
             models::AnomalySeverity,
             models::OrbitalParameterResidual,
+            models::TransitPredictionResponse,
+            models::TransitMatch,
+            models::TransitTarget,
             models::ConjunctionSearchResponse,
             models::ConjunctionMatch,
             models::SatelliteSummary,
@@ -140,6 +145,8 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
             "/satellites/:id/detect-anomalies",
             post(handlers::detect_satellite_anomalies),
         )
+        .route("/transits/solar", get(handlers::get_solar_transits))
+        .route("/transits/lunar", get(handlers::get_lunar_transits))
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);
 
