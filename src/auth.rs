@@ -272,8 +272,8 @@ pub fn create_jwt_token(
     create_jwt_token_full(
         sub,
         role,
-        Some("satellite-api".to_string()),
-        Some("satellite-api".to_string()),
+        Some("astrea-sda-api".to_string()),
+        Some("astrea-sda-api".to_string()),
         Some(default_scope.to_string()),
         ttl_seconds,
     )
@@ -378,8 +378,8 @@ pub async fn login_handler(
     let (token, claims) = create_jwt_token_full(
         username,
         sanitized_role,
-        Some("satellite-api".to_string()),
-        Some("satellite-api".to_string()),
+        Some("astrea-sda-api".to_string()),
+        Some("astrea-sda-api".to_string()),
         Some(scope),
         ttl_seconds,
     )?;

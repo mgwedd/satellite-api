@@ -15,7 +15,7 @@ KEYS_DIR="$DIR/.keys"
 PRIV_KEY="${RSA_PRIVATE_KEY_FILE:-$KEYS_DIR/rsa_private.pem}"
 
 echo "=========================================================="
-echo "🔑 Satellite API - Local RS256 JWT Token Generator"
+echo "🔑 Astrea SDA API - Local RS256 JWT Token Generator"
 echo "=========================================================="
 echo "  Subject   : $USERNAME"
 echo "  Role      : $ROLE"

@@ -1,4 +1,4 @@
-use satellite_api::{models::CreateSatelliteDto, repository::SatelliteRepository};
+use astrea_sda_api::{models::CreateSatelliteDto, repository::SatelliteRepository};
 
 #[tokio::test]
 async fn test_tiered_cache_l1_hit_and_invalidation() {

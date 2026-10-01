@@ -1,9 +1,9 @@
 [package]
-name = "satellite-api"
+name = "astrea-sda-api"
 version = "0.1.0"
 edition = "2021"
 authors = ["Michael Wedd"]
-description = "A high-performance Rust API for satellite tracking, SGP4 propagation, and visibility prediction"
+description = "A high-performance Rust API for Space Domain Awareness (SDA), satellite tracking, SGP4 propagation, and visibility prediction"
 
 [dependencies]
 axum = "0.7"

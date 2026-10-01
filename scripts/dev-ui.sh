@@ -5,7 +5,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 cd "$DIR"
 
 echo "============================================================"
-echo "🛰️  Satellite API - Interactive OpenAPI UI Launcher"
+echo "🛰️  Astrea SDA API - Interactive OpenAPI UI Launcher"
 echo "============================================================"
 echo ""
 echo "Available Interactive UI Modes:"
@@ -27,7 +27,7 @@ MODE="${1:-1}"
 
 case "$MODE" in
   1|"server"|"swagger")
-    echo "🚀 Launching Axum Satellite API Server..."
+    echo "🚀 Launching Axum Astrea SDA API Server..."
     export PATH="$HOME/.cargo/bin:$PATH"
     cargo run
     ;;

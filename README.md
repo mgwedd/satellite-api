@@ -1,6 +1,6 @@
-# 🛰️ Satellite API
+# 🛰️ Astrea Space Domain Awareness (SDA) API
 
-High-performance, low-latency Rust API for orbital satellite tracking, SGP4 propagation, ground station visibility predictions, and CelesTrak TLE dataset synchronization.
+High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital satellite tracking, SGP4 propagation, ground station visibility predictions, and CelesTrak TLE dataset synchronization.
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Axum](https://img.shields.io/badge/Axum-0.7-blue.svg)](https://github.com/tokio-rs/axum)
@@ -18,7 +18,7 @@ High-performance, low-latency Rust API for orbital satellite tracking, SGP4 prop
 * 🔄 **Automated CelesTrak Sync Pipeline**: Background discovery worker syncing TLE data sets (e.g. `stations`, `starlink`, `weather`, `visual`) every 6 hours with on-demand trigger endpoints.
 * 📑 **Checkpoint Cursor Pagination**: Deterministic, opaque base64 checkpoint tokens for high-throughput pagination without missing or duplicated items during active ingest.
 * 📚 **Interactive Swagger UI & OpenAPI Specification**: Auto-generated schema contract hosted at `/swagger-ui` and exposed via OpenAPI 3.0 at `/api-docs/openapi.json`.
-* 🛠️ **Fern-Generated SDKs**: Ergonomic, production-ready SDKs for **TypeScript**, **Python**, and **Go** located in [`sdks/`](file:///Users/wedd/.gemini/antigravity/worktrees/satellite-api/read-celestrak-columns/sdks).
+* 🛠️ **Fern-Generated SDKs**: Ergonomic, production-ready SDKs for **TypeScript**, **Python**, **Go**, **Java**, and **Rust** located in [`sdks/`](sdks).
 * 🛡️ **CI Gate & Contract Verification**: Automated GitHub Actions workflow enforcing `cargo test`, `cargo fmt`, Docker container build verification, and `pb33f/openapi-changes` schema contract checks.
 
 ---
@@ -36,8 +36,8 @@ High-performance, low-latency Rust API for orbital satellite tracking, SGP4 prop
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/mgwedd/satellite-api.git
-   cd satellite-api
+   git clone https://github.com/mgwedd/astrea-sda-api.git
+   cd astrea-sda-api
    ```
 
 2. **Generate your Custom Local RSA 2048-bit Keypair**:
@@ -73,13 +73,13 @@ Build the Alpine container and mount your local `.keys/` directory (or pass `RSA
 
 ```bash
 # Build the Docker image
-docker build -t satellite-api .
+docker build -t astrea-sda-api .
 
 # Generate your local custom RSA keypair if not already created
 ./scripts/setup-keys.sh
 
 # Run the container mounting your local .keys directory
-docker run -p 8080:8080 -v "$(pwd)/.keys:/app/.keys:ro" satellite-api
+docker run -p 8080:8080 -v "$(pwd)/.keys:/app/.keys:ro" astrea-sda-api
 ```
 
 To generate matching RS256 tokens for the running container:
@@ -248,7 +248,7 @@ sdk := client.NewClient(
 )
 ```
 
-* **CI Release Assets**: Official SDK release packages (`satellite-api-sdk-typescript.tar.gz`, `satellite-api-sdk-python.tar.gz`, `satellite-api-sdk-go.tar.gz`, `satellite-api-sdk-java.tar.gz`, `satellite-api-sdk-rust.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
+* **CI Release Assets**: Official SDK release packages (`astrea-sda-api-sdk-typescript.tar.gz`, `astrea-sda-api-sdk-python.tar.gz`, `astrea-sda-api-sdk-go.tar.gz`, `astrea-sda-api-sdk-java.tar.gz`, `astrea-sda-api-sdk-rust.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
 * **Local SDK Generation**: To generate SDKs locally for testing:
   ```bash
   npm install -g fern-api

@@ -1,4 +1,4 @@
-use satellite_api::ApiDoc;
+use astrea_sda_api::ApiDoc;
 use std::fs;
 use utoipa::OpenApi;
 

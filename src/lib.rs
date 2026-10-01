@@ -109,7 +109,7 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
     const REDOC_HTML: &str = r#"<!DOCTYPE html>
 <html>
   <head>
-    <title>Satellite API - Interactive OpenAPI Documentation</title>
+    <title>Astrea SDA API - Interactive OpenAPI Documentation</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">

@@ -1,8 +1,8 @@
+use astrea_sda_api::{create_router, repository::SatelliteRepository};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use satellite_api::{create_router, repository::SatelliteRepository};
 use serde_json::{json, Value};
 use tower::ServiceExt; // for `oneshot`
 

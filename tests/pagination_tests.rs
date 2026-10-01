@@ -1,4 +1,4 @@
-use satellite_api::{
+use astrea_sda_api::{
     models::CreateSatelliteDto, pagination::PaginationQuery, repository::SatelliteRepository,
 };
 

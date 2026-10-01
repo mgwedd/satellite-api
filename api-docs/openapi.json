@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "satellite-api",
-    "description": "A high-performance Rust API for satellite tracking, SGP4 propagation, and visibility prediction",
+    "title": "astrea-sda-api",
+    "description": "A high-performance Rust API for Space Domain Awareness (SDA), satellite tracking, SGP4 propagation, and visibility prediction",
     "contact": {
       "name": "Michael Wedd"
     },

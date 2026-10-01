@@ -70,6 +70,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "astrea-sda-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.21.7",
+ "chrono",
+ "jsonwebtoken",
+ "moka",
+ "rand 0.8.8",
+ "rayon",
+ "redis",
+ "reqwest 0.11.27",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sgp4",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "utoipa-swagger-ui",
+ "uuid",
+]
+
+[[package]]
 name = "async-lock"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,35 +2265,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "satellite-api"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64 0.21.7",
- "chrono",
- "jsonwebtoken",
- "moka",
- "rand 0.8.8",
- "rayon",
- "redis",
- "reqwest 0.11.27",
- "rsa",
- "serde",
- "serde_json",
- "sgp4",
- "sqlx",
- "thiserror 1.0.69",
- "tokio",
- "tower",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "utoipa-swagger-ui",
- "uuid",
 ]
 
 [[package]]

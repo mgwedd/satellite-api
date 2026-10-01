@@ -45,7 +45,7 @@ impl DiscoveryPipeline {
 
         let response = client
             .get(&url)
-            .header("User-Agent", "satellite-api/0.1.0")
+            .header("User-Agent", "astrea-sda-api/0.1.0")
             .send()
             .await
             .map_err(|e| format!("HTTP request failed: {}", e))?;

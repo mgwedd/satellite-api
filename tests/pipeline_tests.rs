@@ -1,4 +1,4 @@
-use satellite_api::services::pipeline::DiscoveryPipeline;
+use astrea_sda_api::services::pipeline::DiscoveryPipeline;
 
 #[test]
 fn test_parse_3_line_tle_text() {
