@@ -4,7 +4,7 @@ use crate::models::{
     GroundTrackPoint, GroundTrackResponse, IlluminationResponse, LightingState,
     NextVisiblePassResponse, ObserverTwilightState, OverheadResponse, Satellite, SatelliteSummary,
 };
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Utc};
 use rayon::prelude::*;
 use sgp4::{Constants, Elements, Prediction};
 
@@ -27,21 +27,14 @@ pub fn normalize_tle_line(line: &str, expected_line_num: char) -> String {
     }
 }
 
+/// Julian Date (UTC) from the Unix epoch, including sub-second precision
+pub fn julian_date(time: DateTime<Utc>) -> f64 {
+    time.timestamp_millis() as f64 / 86_400_000.0 + 2_440_587.5
+}
+
 /// Computes Local Sidereal Time (Greenwich Mean Sidereal Time + East Longitude) in radians
 pub fn calculate_local_sidereal_time(time: DateTime<Utc>, lon_deg: f64) -> f64 {
-    let year = time.year() as f64;
-    let month = time.month() as f64;
-    let day = time.day() as f64;
-    let hour = time.hour() as f64;
-    let minute = time.minute() as f64;
-    let second = time.second() as f64;
-
-    // Julian Date calculation
-    let jd = 367.0 * year - (7.0 * (year + ((month + 9.0) / 12.0).floor())) / 4.0
-        + (275.0 * month) / 9.0
-        + day
-        + 1721013.5
-        + (hour + minute / 60.0 + second / 3600.0) / 24.0;
+    let jd = julian_date(time);
 
     let d = jd - 2451545.0;
     // GMST in degrees
@@ -103,7 +96,7 @@ pub fn ecf_to_look_angles(
     let range_km = (rx * rx + ry * ry + rz * rz).sqrt();
     let elevation = (top_u / range_km).asin().to_degrees();
 
-    let mut azimuth = (-top_e).atan2(top_s).to_degrees();
+    let mut azimuth = top_e.atan2(-top_s).to_degrees();
     if azimuth < 0.0 {
         azimuth += 360.0;
     }
@@ -144,9 +137,9 @@ pub fn calculate_look_angles(
         .propagate(minutes_since_epoch)
         .map_err(|e| AppError::Sgp4Error(format!("SGP4 propagation error: {:?}", e)))?;
 
-    let lst = calculate_local_sidereal_time(time, lon);
+    let lst = calculate_local_sidereal_time(time, 0.0);
     let sat_ecf = eci_to_ecf(prediction.position, lst);
-    Ok(ecf_to_look_angles(lat, lon, alt, sat_ecf))
+    Ok(ecf_to_look_angles(lat, lon, alt / 1000.0, sat_ecf))
 }
 
 /// Multi-threaded batch evaluation of all satellites using **Rayon** (`par_iter()`)
@@ -510,18 +503,7 @@ pub fn generate_ground_track(
 
 /// Computes low-precision Sun ECI position vector [x, y, z] in km
 pub fn calculate_sun_position_eci(time: DateTime<Utc>) -> [f64; 3] {
-    let year = time.year() as f64;
-    let month = time.month() as f64;
-    let day = time.day() as f64;
-    let hour = time.hour() as f64;
-    let minute = time.minute() as f64;
-    let second = time.second() as f64;
-
-    let jd = 367.0 * year - (7.0 * (year + ((month + 9.0) / 12.0).floor())) / 4.0
-        + (275.0 * month) / 9.0
-        + day
-        + 1721013.5
-        + (hour + minute / 60.0 + second / 3600.0) / 24.0;
+    let jd = julian_date(time);
 
     let d = jd - 2451545.0;
 
@@ -619,11 +601,12 @@ pub fn calculate_illumination(
         ObserverTwilightState::Night
     };
 
-    let is_visibly_observable =
-        lighting_state != LightingState::Umbra && observer_sun_elevation_deg <= -6.0;
-
     let sat_ecf = eci_to_ecf(sat_eci, gmst);
     let obs_look = ecf_to_look_angles(lat, lon, alt / 1000.0, sat_ecf);
+
+    let is_visibly_observable = lighting_state != LightingState::Umbra
+        && observer_sun_elevation_deg <= -6.0
+        && obs_look.elevation > 0.0;
     let slant_range_km = obs_look.range_km;
 
     let obs_x_ecf = (re_km + alt / 1000.0) * lat.to_radians().cos() * lon.to_radians().cos();
@@ -635,9 +618,17 @@ pub fn calculate_illumination(
         sat_ecf[2] - obs_z_ecf,
     ];
 
-    let dot_phase =
-        (obs_to_sat[0] * d_vec[0] + obs_to_sat[1] * d_vec[1] + obs_to_sat[2] * d_vec[2])
-            / (slant_range_km * d_mag);
+    let sat_to_sun = [
+        sun_ecf[0] - sat_ecf[0],
+        sun_ecf[1] - sat_ecf[1],
+        sun_ecf[2] - sat_ecf[2],
+    ];
+    let obs_to_sat_mag =
+        (obs_to_sat[0].powi(2) + obs_to_sat[1].powi(2) + obs_to_sat[2].powi(2)).sqrt();
+    let dot_phase = -(obs_to_sat[0] * sat_to_sun[0]
+        + obs_to_sat[1] * sat_to_sun[1]
+        + obs_to_sat[2] * sat_to_sun[2])
+        / (obs_to_sat_mag * d_mag);
     let phase_angle_rad = dot_phase.clamp(-1.0, 1.0).acos();
 
     let phase_fn = (1.0 / std::f64::consts::PI)
@@ -710,6 +701,7 @@ pub fn find_conjunctions(
             let mut min_dist_km = f64::MAX;
             let mut closest_time = start_time;
             let mut rel_vel_kms = 0.0;
+            let mut samples: Vec<(i64, f64)> = Vec::new();
 
             for step in 0..=total_steps {
                 let current_time = start_time + chrono::Duration::minutes(step * step_mins);
@@ -723,6 +715,7 @@ pub fn find_conjunctions(
                     let dy = pred_a.position[1] - pred_b.position[1];
                     let dz = pred_a.position[2] - pred_b.position[2];
                     let dist_km = (dx * dx + dy * dy + dz * dz).sqrt();
+                    samples.push((step, dist_km));
 
                     if dist_km < min_dist_km {
                         min_dist_km = dist_km;
@@ -732,6 +725,54 @@ pub fn find_conjunctions(
                         let dvy = pred_a.velocity[1] - pred_b.velocity[1];
                         let dvz = pred_a.velocity[2] - pred_b.velocity[2];
                         rel_vel_kms = (dvx * dvx + dvy * dvy + dvz * dvz).sqrt();
+                    }
+                }
+            }
+
+            let dist_at = |mins_from_start: f64| -> Option<(f64, f64)> {
+                let ms = (mins_from_start * 60000.0) as i64;
+                let t = start_time + chrono::Duration::milliseconds(ms);
+                let pa = const_a
+                    .propagate((t - epoch_a).num_milliseconds() as f64 / 60000.0)
+                    .ok()?;
+                let pb = const_b
+                    .propagate((t - epoch_b).num_milliseconds() as f64 / 60000.0)
+                    .ok()?;
+                let d = (0..3)
+                    .map(|k| (pa.position[k] - pb.position[k]).powi(2))
+                    .sum::<f64>();
+                let v = (0..3)
+                    .map(|k| (pa.velocity[k] - pb.velocity[k]).powi(2))
+                    .sum::<f64>();
+                Some((d.sqrt(), v.sqrt()))
+            };
+            let gr = 0.618_033_988_75;
+            for w in 0..samples.len() {
+                let prev = if w > 0 { samples[w - 1].1 } else { f64::MAX };
+                let next = samples.get(w + 1).map_or(f64::MAX, |x| x.1);
+                if samples[w].1 > prev || samples[w].1 > next {
+                    continue;
+                }
+                let centre = (samples[w].0 * step_mins) as f64;
+                let (mut lo, mut hi) = (centre - step_mins as f64, centre + step_mins as f64);
+                while hi - lo > 1.0 / 600.0 {
+                    let m1 = hi - gr * (hi - lo);
+                    let m2 = lo + gr * (hi - lo);
+                    let d1 = dist_at(m1).map_or(f64::MAX, |x| x.0);
+                    let d2 = dist_at(m2).map_or(f64::MAX, |x| x.0);
+                    if d1 < d2 {
+                        hi = m2
+                    } else {
+                        lo = m1
+                    }
+                }
+                let tca = (lo + hi) / 2.0;
+                if let Some((d, v)) = dist_at(tca) {
+                    if d < min_dist_km {
+                        min_dist_km = d;
+                        rel_vel_kms = v;
+                        closest_time =
+                            start_time + chrono::Duration::milliseconds((tca * 60000.0) as i64);
                     }
                 }
             }
@@ -800,7 +841,7 @@ pub fn calculate_doppler_shift(
         .propagate(minutes_since_epoch)
         .map_err(|e| AppError::Sgp4Error(format!("SGP4 propagation error: {:?}", e)))?;
 
-    let lst = calculate_local_sidereal_time(time, lon);
+    let lst = calculate_local_sidereal_time(time, 0.0);
     let sat_ecf = eci_to_ecf(prediction.position, lst);
     let sat_vel_ecf = eci_to_ecf_velocity(prediction.position, prediction.velocity, lst);
 
