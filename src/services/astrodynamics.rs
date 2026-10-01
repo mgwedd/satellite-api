@@ -156,6 +156,7 @@ pub fn find_overhead_satellite(
             calculate_look_angles(sat, lat, lon, alt, time)
                 .ok()
                 .map(|look| (sat, look.elevation))
+                .filter(|(_, elevation)| *elevation > 0.0)
         })
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(sat, elevation)| OverheadResponse {
@@ -164,7 +165,12 @@ pub fn find_overhead_satellite(
         })
 }
 
-/// Predicts the next visible pass for a specific satellite above an elevation threshold
+/// Predicts the next pass of a satellite above an elevation threshold.
+///
+/// Samples elevation every 60 s, refines any elevation peak between samples with a
+/// golden-section search (so passes shorter than one step are not skipped), then
+/// bisects the threshold crossing (AOS) to 1 s. Assumes elevation is unimodal within
+/// +/-60 s of a sampled local maximum, which holds for orbits with period >> 2 min.
 pub fn find_next_visible_pass(
     satellite: &Satellite,
     lat: f64,
@@ -174,23 +180,73 @@ pub fn find_next_visible_pass(
     elevation_threshold_deg: f64,
     search_duration_minutes: i64,
 ) -> Result<NextVisiblePassResponse, AppError> {
-    for minute_step in 0..search_duration_minutes {
-        let current_time = start_time + chrono::Duration::minutes(minute_step);
-        if let Ok(look) = calculate_look_angles(satellite, lat, lon, alt, current_time) {
-            if look.elevation >= elevation_threshold_deg {
-                return Ok(NextVisiblePassResponse {
-                    satellite_id: satellite.id,
-                    satellite_name: satellite.name.clone(),
-                    pass_time: current_time,
-                    elevation_deg: look.elevation,
-                    azimuth_deg: look.azimuth,
-                    range_km: look.range_km,
-                });
+    let elev = |t: DateTime<Utc>| {
+        calculate_look_angles(satellite, lat, lon, alt, t)
+            .map(|l| l.elevation)
+            .unwrap_or(f64::NEG_INFINITY)
+    };
+    let at =
+        |t0: DateTime<Utc>, secs: f64| t0 + chrono::Duration::milliseconds((secs * 1000.0) as i64);
+
+    let step = 60.0;
+    let mut prev_t = start_time;
+    let mut prev_e = elev(start_time);
+    let mut aos_bracket = if prev_e >= elevation_threshold_deg {
+        Some((start_time, start_time))
+    } else {
+        None
+    };
+
+    let mut k = 1;
+    while aos_bracket.is_none() && k <= search_duration_minutes {
+        let t = start_time + chrono::Duration::minutes(k);
+        let e = elev(t);
+        if e >= elevation_threshold_deg {
+            aos_bracket = Some((prev_t, t));
+        } else {
+            // A short pass can rise above the threshold and set again between samples.
+            let next_e = elev(t + chrono::Duration::minutes(1));
+            if e >= prev_e && e >= next_e {
+                let (mut lo, mut hi) = (-step, step);
+                while hi - lo > 1.0 {
+                    let m1 = hi - 0.618_033_988_75 * (hi - lo);
+                    let m2 = lo + 0.618_033_988_75 * (hi - lo);
+                    if elev(at(t, m1)) > elev(at(t, m2)) {
+                        hi = m2
+                    } else {
+                        lo = m1
+                    }
+                }
+                let peak_t = at(t, (lo + hi) / 2.0);
+                if elev(peak_t) >= elevation_threshold_deg {
+                    aos_bracket = Some((prev_t.max(at(t, -step)), peak_t));
+                }
             }
+        }
+        prev_t = t;
+        prev_e = e;
+        k += 1;
+    }
+
+    let (mut below, mut above) = aos_bracket.ok_or(AppError::NotFound)?;
+    while (above - below).num_milliseconds() > 1000 {
+        let mid = below + (above - below) / 2;
+        if elev(mid) >= elevation_threshold_deg {
+            above = mid
+        } else {
+            below = mid
         }
     }
 
-    Err(AppError::NotFound)
+    let look = calculate_look_angles(satellite, lat, lon, alt, above)?;
+    Ok(NextVisiblePassResponse {
+        satellite_id: satellite.id,
+        satellite_name: satellite.name.clone(),
+        pass_time: above,
+        elevation_deg: look.elevation,
+        azimuth_deg: look.azimuth,
+        range_km: look.range_km,
+    })
 }
 
 /// Converts ECF position [X, Y, Z] in km to WGS-84 Geodetic Latitude (deg), Longitude (deg), and Altitude (km)
@@ -279,6 +335,21 @@ pub fn generate_footprint_polygon_coords(
     vec![ring]
 }
 
+/// True when the footprint ring neither encloses a pole nor crosses the anti-meridian,
+/// i.e. when a single unsplit GeoJSON Polygon ring represents it correctly.
+pub fn footprint_ring_is_simple(lat_deg: f64, lon_deg: f64, radius_km: f64) -> bool {
+    let ang_deg = (radius_km / 6378.137).to_degrees();
+    if lat_deg.abs() + ang_deg >= 90.0 {
+        return false;
+    }
+    // Max longitude half-width of a spherical cap: asin(sin(r) / cos(lat))
+    let half_width = (ang_deg.to_radians().sin() / lat_deg.to_radians().cos())
+        .min(1.0)
+        .asin()
+        .to_degrees();
+    lon_deg - half_width > -180.0 && lon_deg + half_width < 180.0
+}
+
 /// Splits continuous coordinates across the ±180° Anti-Meridian line to prevent rendering streaks
 pub fn build_anti_meridian_geojson_geometry(points: &[[f64; 3]]) -> GeoJsonGeometry {
     if points.is_empty() {
@@ -322,7 +393,6 @@ pub fn build_anti_meridian_geojson_geometry(points: &[[f64; 3]]) -> GeoJsonGeome
 pub fn generate_czml_document(
     satellite: &Satellite,
     trajectory: &[GroundTrackPoint],
-    step_seconds: usize,
 ) -> serde_json::Value {
     if trajectory.is_empty() {
         return serde_json::json!([]);
@@ -333,8 +403,9 @@ pub fn generate_czml_document(
     let availability = format!("{}/{}", start_iso, end_iso);
 
     let mut cartesian_coords = Vec::with_capacity(trajectory.len() * 4);
-    for (idx, pt) in trajectory.iter().enumerate() {
-        let time_offset = (idx * step_seconds) as f64;
+    for pt in trajectory {
+        let time_offset =
+            (pt.timestamp - trajectory[0].timestamp).num_milliseconds() as f64 / 1000.0;
         cartesian_coords.push(serde_json::json!(time_offset));
         cartesian_coords.push(serde_json::json!(pt.position_ecf_km[0] * 1000.0));
         cartesian_coords.push(serde_json::json!(pt.position_ecf_km[1] * 1000.0));
@@ -406,7 +477,6 @@ pub fn generate_ground_track(
     let total_steps = (duration_mins * 60) / step_secs;
     let mut trajectory = Vec::with_capacity(total_steps + 1);
     let mut geojson_coords = Vec::with_capacity(if include_geojson { total_steps + 1 } else { 0 });
-    let mut sum_alt = 0.0;
 
     for i in 0..=total_steps {
         let offset_secs = (i * step_secs) as i64;
@@ -419,7 +489,6 @@ pub fn generate_ground_track(
             let vel_ecf = eci_to_ecf_velocity(prediction.position, prediction.velocity, lst);
             let (lat, lon, alt_km) = ecf_to_geodetic(pos_ecf);
 
-            sum_alt += alt_km;
             trajectory.push(GroundTrackPoint {
                 timestamp: current_time,
                 lat,
@@ -435,12 +504,10 @@ pub fn generate_ground_track(
         }
     }
 
-    let avg_alt_km = if !trajectory.is_empty() {
-        sum_alt / trajectory.len() as f64
-    } else {
-        400.0
-    };
-    let footprint_radius_km = calculate_footprint_radius(avg_alt_km);
+    // Footprint is instantaneous: evaluated at the first trajectory point.
+    let footprint_radius_km = trajectory
+        .first()
+        .map_or(0.0, |p| calculate_footprint_radius(p.alt_km));
 
     let (geojson, footprint_polygon) = if include_geojson {
         let geometry = build_anti_meridian_geojson_geometry(&geojson_coords);
@@ -455,7 +522,10 @@ pub fn generate_ground_track(
             }),
         };
 
-        let footprint_poly = if let Some(first_pt) = trajectory.first() {
+        let footprint_poly = if let Some(first_pt) = trajectory
+            .first()
+            .filter(|p| footprint_ring_is_simple(p.lat, p.lon, footprint_radius_km))
+        {
             let poly_ring =
                 generate_footprint_polygon_coords(first_pt.lat, first_pt.lon, footprint_radius_km);
             Some(GeoJsonFeature {
@@ -482,7 +552,7 @@ pub fn generate_ground_track(
     };
 
     let czml = if include_czml {
-        Some(generate_czml_document(satellite, &trajectory, step_secs))
+        Some(generate_czml_document(satellite, &trajectory))
     } else {
         None
     };
@@ -526,7 +596,7 @@ pub fn calculate_sun_position_eci(time: DateTime<Utc>) -> [f64; 3] {
     [x, y, z]
 }
 
-/// Computes solar shadow geometry, observer twilight state, and visual magnitude
+/// Computes solar shadow geometry and observer twilight state
 pub fn calculate_illumination(
     satellite: &Satellite,
     lat: f64,
@@ -607,42 +677,6 @@ pub fn calculate_illumination(
     let is_visibly_observable = lighting_state != LightingState::Umbra
         && observer_sun_elevation_deg <= -6.0
         && obs_look.elevation > 0.0;
-    let slant_range_km = obs_look.range_km;
-
-    let obs_x_ecf = (re_km + alt / 1000.0) * lat.to_radians().cos() * lon.to_radians().cos();
-    let obs_y_ecf = (re_km + alt / 1000.0) * lat.to_radians().cos() * lon.to_radians().sin();
-    let obs_z_ecf = (re_km + alt / 1000.0) * lat.to_radians().sin();
-    let obs_to_sat = [
-        sat_ecf[0] - obs_x_ecf,
-        sat_ecf[1] - obs_y_ecf,
-        sat_ecf[2] - obs_z_ecf,
-    ];
-
-    let sat_to_sun = [
-        sun_ecf[0] - sat_ecf[0],
-        sun_ecf[1] - sat_ecf[1],
-        sun_ecf[2] - sat_ecf[2],
-    ];
-    let obs_to_sat_mag =
-        (obs_to_sat[0].powi(2) + obs_to_sat[1].powi(2) + obs_to_sat[2].powi(2)).sqrt();
-    let dot_phase = -(obs_to_sat[0] * sat_to_sun[0]
-        + obs_to_sat[1] * sat_to_sun[1]
-        + obs_to_sat[2] * sat_to_sun[2])
-        / (obs_to_sat_mag * d_mag);
-    let phase_angle_rad = dot_phase.clamp(-1.0, 1.0).acos();
-
-    let phase_fn = (1.0 / std::f64::consts::PI)
-        * (phase_angle_rad.sin()
-            + (std::f64::consts::PI - phase_angle_rad) * phase_angle_rad.cos());
-    let safe_phase_fn = phase_fn.max(0.001);
-
-    let v0 = 3.0;
-    let estimated_visual_magnitude = if lighting_state == LightingState::Umbra {
-        99.0
-    } else {
-        v0 + 5.0 * (slant_range_km / 1000.0).log10() - 2.5 * safe_phase_fn.log10()
-    };
-
     Ok(IlluminationResponse {
         satellite_id: satellite.id,
         satellite_name: satellite.name.clone(),
@@ -650,7 +684,6 @@ pub fn calculate_illumination(
         observer_twilight_state,
         observer_sun_elevation_deg,
         is_visibly_observable,
-        estimated_visual_magnitude,
     })
 }
 
@@ -660,16 +693,25 @@ pub fn find_conjunctions(
     start_time: DateTime<Utc>,
     max_distance_km: f64,
     duration_hours: i64,
-    step_minutes: i64,
 ) -> ConjunctionSearchResponse {
     let duration_hrs = duration_hours.clamp(1, 72);
-    let step_mins = step_minutes.clamp(1, 60);
+    // Fixed 60 s grid; every sampled local minimum is refined below. Coarser grids can
+    // step over an entire encounter, so the step is not user-configurable.
+    let step_mins: i64 = 1;
     let total_steps = (duration_hrs * 60) / step_mins;
 
+    // Two records with the same NORAD ID are one object, not a conjunction.
+    let norad = |s: &Satellite| {
+        normalize_tle_line(&s.tle.line_one, '1')
+            .get(2..7)
+            .map(str::to_owned)
+    };
     let mut pairs = Vec::new();
     for i in 0..satellites.len() {
         for j in (i + 1)..satellites.len() {
-            pairs.push((&satellites[i], &satellites[j]));
+            if norad(&satellites[i]) != norad(&satellites[j]) {
+                pairs.push((&satellites[i], &satellites[j]));
+            }
         }
     }
 

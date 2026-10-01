@@ -159,17 +159,6 @@
               "format": "int64",
               "nullable": true
             }
-          },
-          {
-            "name": "step_minutes",
-            "in": "query",
-            "description": "Step interval in minutes (default: 1 min, max: 60)",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "nullable": true
-            }
           }
         ],
         "responses": {
@@ -1567,14 +1556,9 @@
           "lightingState",
           "observerTwilightState",
           "observerSunElevationDeg",
-          "isVisiblyObservable",
-          "estimatedVisualMagnitude"
+          "isVisiblyObservable"
         ],
         "properties": {
-          "estimatedVisualMagnitude": {
-            "type": "number",
-            "format": "double"
-          },
           "isVisiblyObservable": {
             "type": "boolean"
           },

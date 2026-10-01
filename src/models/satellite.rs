@@ -143,7 +143,6 @@ pub struct IlluminationResponse {
     pub observer_twilight_state: ObserverTwilightState,
     pub observer_sun_elevation_deg: f64,
     pub is_visibly_observable: bool,
-    pub estimated_visual_magnitude: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -151,7 +150,6 @@ pub struct IlluminationResponse {
 pub struct ConjunctionSearchQuery {
     pub max_distance_km: Option<f64>,
     pub duration_hours: Option<i64>,
-    pub step_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

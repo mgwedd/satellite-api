@@ -49,5 +49,4 @@ fn test_satellite_illumination_calculation() {
 
     assert_eq!(res.satellite_name, "ATLAS CENTAUR 2");
     assert!(res.observer_sun_elevation_deg < 0.0);
-    assert!(res.estimated_visual_magnitude >= -5.0 && res.estimated_visual_magnitude <= 15.0);
 }

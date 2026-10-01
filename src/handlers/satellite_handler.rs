@@ -507,8 +507,6 @@ pub struct ConjunctionSearchQueryParams {
     pub max_distance_km: Option<f64>,
     /// Forecast window forward in hours (default: 24 hrs, max: 72)
     pub duration_hours: Option<i64>,
-    /// Step interval in minutes (default: 1 min, max: 60)
-    pub step_minutes: Option<i64>,
 }
 
 /// Search Conjunctions & Satellite Collision Radar
@@ -533,15 +531,13 @@ pub async fn search_conjunctions(
     let start_time = Utc::now();
     let max_distance_km = params.max_distance_km.unwrap_or(10.0);
     let duration_hours = params.duration_hours.unwrap_or(24);
-    let step_minutes = params.step_minutes.unwrap_or(1);
 
     let time_bucket = start_time.timestamp() / 60;
     let cache_key = format!(
-        "conjunctions:{}:{:.1}:{}:{}:{}",
+        "conjunctions:{}:{:.1}:{}:{}",
         satellites.len(),
         max_distance_km,
         duration_hours,
-        step_minutes,
         time_bucket
     );
 
@@ -554,7 +550,6 @@ pub async fn search_conjunctions(
                     start_time,
                     max_distance_km,
                     duration_hours,
-                    step_minutes,
                 )
             })
             .await

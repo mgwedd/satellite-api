@@ -2,7 +2,7 @@ use astrea_sda_api::{
     models::{ConjunctionSearchResponse, Satellite, Tle},
     services::astrodynamics::find_conjunctions,
 };
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use uuid::Uuid;
 
 fn mock_satellite(name: &str, line1: &str, line2: &str) -> Satellite {
@@ -20,25 +20,21 @@ fn mock_satellite(name: &str, line1: &str, line2: &str) -> Satellite {
 
 #[test]
 fn test_find_conjunctions_between_satellites() {
-    let line1 = "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994";
-    let line2 = "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397";
-
-    let sat_a = mock_satellite("ATLAS CENTAUR 2", line1, line2);
-    let sat_b = mock_satellite("DEBRIS (DELTA 2)", line1, line2);
+    // Crossing orbits that share an ascending node at epoch 2021-08-27 12:00:00 UTC.
+    let sat_a = mock_satellite(
+        "A",
+        "1 90001U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9996",
+        "2 90001  51.6000 100.0000 0001000   0.0000   0.0000 15.50000000    18",
+    );
+    let sat_b = mock_satellite(
+        "B",
+        "1 90002U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9997",
+        "2 90002  60.0000 100.0000 0001000   0.0000   0.0000 15.50000000    13",
+    );
 
     let satellites = vec![sat_a, sat_b];
-    let start_time = Utc::now();
-    let max_distance_km = 100.0;
-    let duration_hours = 1;
-    let step_minutes = 5;
-
-    let response: ConjunctionSearchResponse = find_conjunctions(
-        &satellites,
-        start_time,
-        max_distance_km,
-        duration_hours,
-        step_minutes,
-    );
+    let start_time = Utc.with_ymd_and_hms(2021, 8, 27, 11, 30, 0).unwrap();
+    let response: ConjunctionSearchResponse = find_conjunctions(&satellites, start_time, 100.0, 1);
 
     assert_eq!(response.max_distance_km, 100.0);
     assert_eq!(response.search_duration_hours, 1);
@@ -46,7 +42,6 @@ fn test_find_conjunctions_between_satellites() {
         response.conjunctions_found > 0,
         "Expected at least 1 conjunction match"
     );
-    assert!(!response.results.is_empty());
     assert!(response.results[0].min_distance_km <= 100.0);
     assert!(response.results[0].relative_velocity_kms >= 0.0);
 }
