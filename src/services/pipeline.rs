@@ -28,11 +28,184 @@ impl CelesTrakGroup {
 
 pub struct DiscoveryPipeline;
 
+use chrono::{DateTime, Datelike, Timelike};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct OmmRecord {
+    #[serde(rename = "OBJECT_NAME")]
+    pub object_name: String,
+    #[serde(rename = "OBJECT_ID")]
+    pub object_id: Option<String>,
+    #[serde(rename = "NORAD_CAT_ID")]
+    pub norad_cat_id: Option<u64>,
+    #[serde(rename = "CLASSIFICATION_TYPE")]
+    pub classification_type: Option<String>,
+    #[serde(rename = "EPOCH")]
+    pub epoch: String,
+    #[serde(rename = "MEAN_MOTION")]
+    pub mean_motion: f64,
+    #[serde(rename = "ECCENTRICITY")]
+    pub eccentricity: f64,
+    #[serde(rename = "INCLINATION")]
+    pub inclination: f64,
+    #[serde(rename = "RA_OF_ASC_NODE")]
+    pub ra_of_asc_node: f64,
+    #[serde(rename = "ARG_OF_PERICENTER")]
+    pub arg_of_pericenter: f64,
+    #[serde(rename = "MEAN_ANOMALY")]
+    pub mean_anomaly: f64,
+    #[serde(rename = "EPHEMERIS_TYPE")]
+    pub ephemeris_type: Option<u32>,
+    #[serde(rename = "ELEMENT_SET_NO")]
+    pub element_set_no: Option<u32>,
+    #[serde(rename = "REV_AT_EPOCH")]
+    pub rev_at_epoch: Option<u64>,
+    #[serde(rename = "BSTAR")]
+    pub bstar: Option<f64>,
+    #[serde(rename = "MEAN_MOTION_DOT")]
+    pub mean_motion_dot: Option<f64>,
+    #[serde(rename = "MEAN_MOTION_DDOT")]
+    pub mean_motion_ddot: Option<f64>,
+}
+
+fn format_cat_id(catnr: u64) -> String {
+    format!("{:05}", catnr % 100000)
+}
+
+fn format_object_id(obj_id: Option<&str>) -> String {
+    if let Some(id) = obj_id {
+        let clean = id.replace('-', "");
+        if clean.len() >= 4 {
+            let year_suffix = &clean[2..4];
+            let rest = &clean[4..];
+            return format!("{:<8}", format!("{}{}", year_suffix, rest));
+        }
+    }
+    "00000A  ".to_string()
+}
+
+fn format_tle_epoch(epoch_str: &str) -> String {
+    let dt_opt = DateTime::parse_from_rfc3339(epoch_str)
+        .map(|d| d.with_timezone(&chrono::Utc))
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(epoch_str, "%Y-%m-%dT%H:%M:%S%.f")
+                .map(|ndt| DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc))
+        });
+
+    if let Ok(dt) = dt_opt {
+        let year_two = dt.year() % 100;
+        let day_of_year = dt.ordinal();
+        let seconds_in_day =
+            dt.num_seconds_from_midnight() as f64 + dt.nanosecond() as f64 / 1_000_000_000.0;
+        let day_frac = day_of_year as f64 + (seconds_in_day / 86400.0);
+        format!("{:02}{:012.8}", year_two, day_frac)
+    } else {
+        "26000.00000000".to_string()
+    }
+}
+
+fn format_mean_motion_dot(val: f64) -> String {
+    let sign = if val < 0.0 { "-" } else { " " };
+    let abs_val = val.abs();
+    let digits = (abs_val * 100_000_000.0).round() as u64;
+    format!("{}.{:08}", sign, digits % 100_000_000)
+}
+
+fn format_tle_exp(val: f64) -> String {
+    if val.abs() < 1e-15 {
+        return " 00000-0".to_string();
+    }
+    let sign = if val < 0.0 { "-" } else { " " };
+    let abs_val = val.abs();
+    let exp = abs_val.log10().floor() as i32 + 1;
+    let mantissa = (abs_val / 10.0f64.powi(exp) * 100000.0).round() as u64;
+    let exp_sign = if exp <= 0 { "-" } else { "+" };
+    format!(
+        "{}{:05}{}{}",
+        sign,
+        mantissa % 100000,
+        exp_sign,
+        exp.abs() % 10
+    )
+}
+
+fn format_eccentricity(ecc: f64) -> String {
+    let digits = (ecc.abs() * 10_000_000.0).round() as u64;
+    format!("{:07}", digits % 10_000_000)
+}
+
+pub fn calculate_tle_checksum(line: &str) -> char {
+    let sum: u32 = line
+        .chars()
+        .take(68)
+        .map(|c| match c {
+            '0'..='9' => c.to_digit(10).unwrap(),
+            '-' => 1,
+            _ => 0,
+        })
+        .sum();
+    std::char::from_digit(sum % 10, 10).unwrap_or('0')
+}
+
+pub fn omm_record_to_tle_lines(record: &OmmRecord) -> (String, String) {
+    let cat_nr = record.norad_cat_id.unwrap_or(0);
+    let cat_str = format_cat_id(cat_nr);
+    let class_char = record
+        .classification_type
+        .as_deref()
+        .unwrap_or("U")
+        .chars()
+        .next()
+        .unwrap_or('U');
+    let obj_id_str = format_object_id(record.object_id.as_deref());
+    let epoch_str = format_tle_epoch(&record.epoch);
+    let ndot_str = format_mean_motion_dot(record.mean_motion_dot.unwrap_or(0.0));
+    let nddot_str = format_tle_exp(record.mean_motion_ddot.unwrap_or(0.0));
+    let bstar_str = format_tle_exp(record.bstar.unwrap_or(0.0));
+    let eph_type = record.ephemeris_type.unwrap_or(0);
+    let elem_set = record.element_set_no.unwrap_or(999);
+
+    let line1_raw = format!(
+        "1 {}{} {} {} {} {} {} {} {:>4}",
+        cat_str,
+        class_char,
+        obj_id_str,
+        epoch_str,
+        ndot_str,
+        nddot_str,
+        bstar_str,
+        eph_type,
+        elem_set % 10000
+    );
+    let c1 = calculate_tle_checksum(&line1_raw);
+    let line1_padded = format!("{:<68}", line1_raw);
+    let line1 = format!("{}{}", &line1_padded[..68], c1);
+
+    let inc = record.inclination;
+    let raan = record.ra_of_asc_node;
+    let ecc_str = format_eccentricity(record.eccentricity);
+    let argp = record.arg_of_pericenter;
+    let ma = record.mean_anomaly;
+    let mm = record.mean_motion;
+    let rev = record.rev_at_epoch.unwrap_or(0) % 100000;
+
+    let line2_raw = format!(
+        "2 {} {:8.4} {:8.4} {} {:8.4} {:8.4} {:11.8}{:5}",
+        cat_str, inc, raan, ecc_str, argp, ma, mm, rev
+    );
+    let c2 = calculate_tle_checksum(&line2_raw);
+    let line2_padded = format!("{:<68}", line2_raw);
+    let line2 = format!("{}{}", &line2_padded[..68], c2);
+
+    (line1, line2)
+}
+
 impl DiscoveryPipeline {
-    /// Fetches TLE text data from CelesTrak for a given group and parses 3-line TLE blocks
+    /// Fetches TLE/OMM data from CelesTrak for a given group using FORMAT=json
     pub async fn fetch_group_tle(group: CelesTrakGroup) -> Result<Vec<CreateSatelliteDto>, String> {
         let url = format!(
-            "https://celestrak.org/NORAD/elements/gp.php?GROUP={}&FORMAT=tle",
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP={}&FORMAT=json",
             group.as_str()
         );
 
@@ -62,7 +235,29 @@ impl DiscoveryPipeline {
             .await
             .map_err(|e| format!("Failed to read text body: {}", e))?;
 
-        Ok(Self::parse_tle_text(&body_text))
+        Ok(Self::parse_discovery_response(&body_text))
+    }
+
+    /// Parses discovery API response text (either OMM JSON array or legacy 3-line TLE)
+    pub fn parse_discovery_response(text: &str) -> Vec<CreateSatelliteDto> {
+        let trimmed = text.trim();
+        if trimmed.starts_with('[') || trimmed.starts_with('{') {
+            if let Ok(records) = serde_json::from_str::<Vec<OmmRecord>>(trimmed) {
+                return records
+                    .into_iter()
+                    .map(|r| {
+                        let name = r.object_name.clone();
+                        let (line_one, line_two) = omm_record_to_tle_lines(&r);
+                        CreateSatelliteDto {
+                            name,
+                            line_one,
+                            line_two,
+                        }
+                    })
+                    .collect();
+            }
+        }
+        Self::parse_tle_text(text)
     }
 
     /// Parses raw 3-line TLE text into a list of CreateSatelliteDto
