@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+
+export PATH="$HOME/.cargo/bin:$PATH"
+
+cargo fmt --check
+cargo clippy --offline --all-targets --all-features -- -D warnings
+
+echo "Formatter and linter passed."

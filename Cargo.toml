@@ -36,6 +36,9 @@ moka = { version = "0.12", features = ["future"] }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
 
+[dev-dependencies]
+cargo-husky = { version = "1.5", default-features = false, features = ["user-hooks"] }
+
 [features]
 default = []
 postgres = ["dep:sqlx"]

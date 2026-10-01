@@ -64,6 +64,12 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
    - Open **[http://localhost:8080/docs](http://localhost:8080/docs)** for Redoc interactive API reference.
    - Run `./scripts/dev-ui.sh` to launch any UI mode (Swagger, Fern Docs, or Static HTML).
 
+6. **Enable Rust-Native Git Pre-Commit Quality Hooks**:
+   Automatically enforce `cargo fmt`, `cargo clippy`, and `cargo test` on every git commit via `cargo-husky` and `.githooks/`:
+   ```bash
+   ./scripts/setup-hooks.sh
+   ```
+
 
 ---
 

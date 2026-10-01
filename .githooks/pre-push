@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+
+export PATH="$HOME/.cargo/bin:$PATH"
+
+cargo test --offline
+
+if command -v redocly &> /dev/null; then
+    redocly lint api-docs/openapi.json
+fi
+
+echo "Unit tests and OpenAPI linter passed."
