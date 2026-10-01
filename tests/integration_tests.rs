@@ -104,7 +104,7 @@ async fn test_full_satellite_crud_and_overhead() {
     // 4. Test Rayon overhead satellite calculation at epoch time (Public endpoint)
     let req = Request::builder()
         .method("GET")
-        .uri("/v1/astrodynamics/overhead?lat=34.05&lon=-118.25&time=2021-08-27T15:52:50Z")
+        .uri("/v1/astrodynamics/overhead?lat=13.923&lon=177.315&time=2021-08-27T16:00:00Z")
         .body(Body::empty())
         .unwrap();
 

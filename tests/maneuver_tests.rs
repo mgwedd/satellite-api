@@ -1,5 +1,5 @@
 use astrea_sda_api::{
-    models::{maneuver::AnomalySeverity, Satellite, Tle},
+    models::{AnomalySeverity, Satellite, Tle},
     services::maneuver,
 };
 use chrono::{TimeZone, Utc};
