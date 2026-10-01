@@ -38,7 +38,9 @@ impl Modify for SecurityAddon {
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        auth::signup_handler,
         auth::login_handler,
+        auth::me_handler,
         handlers::satellite_handler::create_satellite,
         handlers::satellite_handler::list_satellites,
         handlers::satellite_handler::get_satellite,
@@ -60,6 +62,7 @@ impl Modify for SecurityAddon {
         schemas(
             auth::UserRole,
             auth::Claims,
+            auth::SignupRequest,
             auth::LoginRequest,
             auth::AuthResponse,
             models::Satellite,
@@ -105,9 +108,37 @@ impl Modify for SecurityAddon {
 )]
 pub struct ApiDoc;
 
-pub fn create_router(repo: SatelliteRepository) -> Router {
+pub fn default_auth_provider() -> std::sync::Arc<dyn auth::provider::AuthProvider> {
+    if let (Ok(url), Ok(key)) = (
+        std::env::var("SUPABASE_URL"),
+        std::env::var("SUPABASE_ANON_KEY"),
+    ) {
+        if !url.trim().is_empty() && !key.trim().is_empty() {
+            return std::sync::Arc::new(auth::provider::SupabaseAuthProvider::new(url, key));
+        }
+    }
+    if let Ok(db_url) = std::env::var("DATABASE_URL") {
+        if !db_url.trim().is_empty() {
+            if let Ok(pool) = sqlx::PgPool::connect_lazy(&db_url) {
+                return std::sync::Arc::new(auth::provider::PostgresAuthProvider::new(pool));
+            }
+        }
+    }
+    std::sync::Arc::new(auth::provider::MemoryAuthProvider::new())
+}
+
+pub fn create_router_with_auth(
+    repo: SatelliteRepository,
+    auth_provider: std::sync::Arc<dyn auth::provider::AuthProvider>,
+) -> Router {
+    let auth_routes = Router::new()
+        .route("/signup", post(auth::signup_handler))
+        .route("/login", post(auth::login_handler))
+        .route("/me", get(auth::me_handler))
+        .with_state(auth_provider);
+
     let api_routes = Router::new()
-        .route("/auth/login", post(auth::login_handler))
+        .nest("/auth", auth_routes)
         .route(
             "/satellites",
             post(handlers::create_satellite).get(handlers::list_satellites),
@@ -171,4 +202,8 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .nest("/v1", api_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
+}
+
+pub fn create_router(repo: SatelliteRepository) -> Router {
+    create_router_with_auth(repo, default_auth_provider())
 }

@@ -2,7 +2,6 @@ use axum::{
     async_trait,
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts},
-    Json,
 };
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -142,16 +141,32 @@ impl Claims {
     }
 }
 
-/// Request body for JWT authentication login/token generation endpoint.
+pub mod handlers;
+pub mod provider;
+
+pub use handlers::*;
+pub use provider::*;
+
+/// Request body for developer account registration.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SignupRequest {
+    /// Developer email address
+    pub email: String,
+    /// Account password
+    pub password: String,
+    /// Requested role ("viewer", "editor", or "admin", defaults to "viewer")
+    pub role: Option<String>,
+}
+
+/// Request body for developer account login.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
-    /// Username or service subject identifier
-    pub username: String,
-    /// Requested role ("viewer", "editor", or "admin", defaults to "viewer")
-    pub role: Option<String>,
-    /// Optional OAuth 2.0 scopes string (e.g. "read:satellites write:satellites")
-    pub scope: Option<String>,
+    /// Developer email address or username
+    pub email: String,
+    /// Account password
+    pub password: String,
 }
 
 /// Response returned upon successful RS256 JWT token generation.
@@ -331,65 +346,6 @@ where
 
         decode_jwt_token(token)
     }
-}
-
-/// OpenAPI endpoint handler to issue an RS256 JWT authentication token for testing or client auth.
-#[utoipa::path(
-    post,
-    path = "/v1/auth/login",
-    operation_id = "loginHandler",
-    request_body = LoginRequest,
-    responses(
-        (status = 200, description = "RS256 JWT Token issued successfully", body = AuthResponse),
-        (status = 400, description = "Invalid request payload", body = ErrorResponse)
-    ),
-    tag = "Authentication"
-)]
-pub async fn login_handler(
-    Json(payload): Json<LoginRequest>,
-) -> Result<Json<AuthResponse>, AppError> {
-    let username = payload.username.trim();
-    if username.is_empty() {
-        return Err(AppError::BadRequest("Username cannot be empty".into()));
-    }
-
-    let role = payload
-        .role
-        .as_deref()
-        .map(str::trim)
-        .filter(|r| !r.is_empty())
-        .unwrap_or("viewer");
-
-    let sanitized_role = match role.to_lowercase().as_str() {
-        "admin" => "admin",
-        "editor" | "operator" => "editor",
-        _ => "viewer",
-    };
-
-    let default_scope = match sanitized_role {
-        "admin" => "read:satellites write:satellites admin:satellites",
-        "editor" => "read:satellites write:satellites",
-        _ => "read:satellites",
-    };
-
-    let scope = payload.scope.unwrap_or_else(|| default_scope.to_string());
-
-    let ttl_seconds = 86400; // 24 hours
-    let (token, claims) = create_jwt_token_full(
-        username,
-        sanitized_role,
-        Some("astrea-sda-api".to_string()),
-        Some("astrea-sda-api".to_string()),
-        Some(scope),
-        ttl_seconds,
-    )?;
-
-    Ok(Json(AuthResponse {
-        token,
-        token_type: "Bearer".to_string(),
-        expires_in: ttl_seconds as usize,
-        claims,
-    }))
 }
 
 #[cfg(test)]

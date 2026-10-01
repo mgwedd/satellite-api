@@ -13,8 +13,8 @@ async fn test_full_satellite_crud_and_overhead() {
 
     // 0. Login to obtain JWT Bearer Token
     let login_payload = json!({
-        "username": "astrodynamics_admin",
-        "role": "admin"
+        "email": "admin@astrea.local",
+        "password": "password123"
     });
 
     let req = Request::builder()

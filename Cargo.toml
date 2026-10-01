@@ -34,11 +34,11 @@ utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
 # Tiered Cache & Storage dependencies
 moka = { version = "0.12", features = ["future"] }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
 
 [dev-dependencies]
 cargo-husky = { version = "1.5", default-features = false, features = ["user-hooks"] }
 
 [features]
 default = []
-postgres = ["dep:sqlx"]
+postgres = []

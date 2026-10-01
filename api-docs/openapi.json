@@ -93,7 +93,8 @@
         "tags": [
           "Authentication"
         ],
-        "summary": "OpenAPI endpoint handler to issue an RS256 JWT authentication token for testing or client auth.",
+        "summary": "Developer Account Login & JWT Token Generation",
+        "description": "Authenticates developer account credentials and returns an RS256/Supabase JWT Bearer token for API access and Swagger UI authorization.",
         "operationId": "loginHandler",
         "requestBody": {
           "content": {
@@ -107,7 +108,86 @@
         },
         "responses": {
           "200": {
-            "description": "RS256 JWT Token issued successfully",
+            "description": "Authenticated successfully and JWT token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid email or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get Current Authenticated Developer Profile",
+        "description": "Returns decoded JWT claims and profile info for the authenticated caller.",
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "description": "Decoded caller JWT claims",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claims"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/v1/auth/signup": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Developer Account Registration",
+        "description": "Registers a new developer account and issues an authenticated RS256/Supabase JWT Bearer token.",
+        "operationId": "signupHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Developer account registered and JWT token issued",
             "content": {
               "application/json": {
                 "schema": {
@@ -117,7 +197,7 @@
             }
           },
           "400": {
-            "description": "Invalid request payload",
+            "description": "Invalid registration request or email already exists",
             "content": {
               "application/json": {
                 "schema": {
@@ -1721,24 +1801,19 @@
       },
       "LoginRequest": {
         "type": "object",
-        "description": "Request body for JWT authentication login/token generation endpoint.",
+        "description": "Request body for developer account login.",
         "required": [
-          "username"
+          "email",
+          "password"
         ],
         "properties": {
-          "role": {
+          "email": {
             "type": "string",
-            "description": "Requested role (\"viewer\", \"editor\", or \"admin\", defaults to \"viewer\")",
-            "nullable": true
+            "description": "Developer email address or username"
           },
-          "scope": {
+          "password": {
             "type": "string",
-            "description": "Optional OAuth 2.0 scopes string (e.g. \"read:satellites write:satellites\")",
-            "nullable": true
-          },
-          "username": {
-            "type": "string",
-            "description": "Username or service subject identifier"
+            "description": "Account password"
           }
         }
       },
@@ -2007,6 +2082,29 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "SignupRequest": {
+        "type": "object",
+        "description": "Request body for developer account registration.",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Developer email address"
+          },
+          "password": {
+            "type": "string",
+            "description": "Account password"
+          },
+          "role": {
+            "type": "string",
+            "description": "Requested role (\"viewer\", \"editor\", or \"admin\", defaults to \"viewer\")",
+            "nullable": true
           }
         }
       },
