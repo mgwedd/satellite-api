@@ -10,46 +10,43 @@ use utoipa::ToSchema;
 
 use crate::error::AppError;
 
-/// Default RSA 2048 Private Key (PEM format) for development and testing environments.
-const DEV_RSA_PRIVATE_KEY_PEM: &str = r#"-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDjvutPN6szzJj1
-QHUndiknbMd9HNRnUH5eT3Pn4mAzne/DiF/BOGAZ8aA9ev4vwy28ZbYzGCnPyQpN
-vDkD1dgE1tMiNV02alOjBRtzBXnPVbpuZNNFYhRGIfN2jJPThZVYKOuP3oTb6n5B
-q8D/3Zj5WjuCVPPeD/UCrshroFivIEh6yYqKW7L6AwaWjrD0Tbl0cHKCC+ZW/T57
-fe4SOymJlWQF6CLfrH9woeM9EH/0usAEzCHEpz/HlwgNfQSQBXr4nmxMprsQG0rF
-ZTpDftoDzt6jsPreJW0rP1XZOW7Ym+ixz/sjpfw2eCtojq1EBhNai1n4mNlZeonh
-9DoAQb9pAgMBAAECgf9EiaWG/C8ph4kAmu/8JYh9CjTUEg5Z3n9+d6q0k2EgJ4eK
-8J+LJnbFV/yWg/e6/UyQ8IsZv/Z/8aCILvzO4AFXyM6r8iNQckR5QDA34o37N3Fu
-MimNLSxXbsrgrQL6b65iDu5/0sITl0jSZT3PwoB8NLYeotzrwcxE4moDpF22qw8k
-pHCN97Dw5yeeREfnysWkJLgv4sfPA419lDnGc2nhz69P8FF3CDPTjFRIacpyy/L4
-kONhl4af0ntLoyOulrMC1miUkH1ihBwLnjhVgKtPN+0E80HrbUeGy9LYfWhr7JpB
-XIAMzfmLTZrA59V6Vg1Yuv56NLlxqjZJEmOP+8ECgYEA8t1xA6OQFUEwlg+lI8lh
-Mo2XVzM/sfEljlKFzpTfuotVuJ0eEKMedd70JBrSqBeGogYQkZfhB2XsuXRwZLnW
-Wb/EnaT+e1e65oaqn1ZjJt3orGi7MDy3tFZpLsWySOcTpUQFz89rnfv/YjtH2hjc
-DBVDhc2fpEwgVHpx5c0T9EECgYEA8BAlcIKWL/SZFBu7yCFntuPOWt4GDCdkIAP6
-3aew7JJWtRsfM6WVplpvEGnYzfCSvorMF3sRBEwEgOF7DLUqrbKRP32E2UuIbFkc
-BmMF0Es9VQXKXdLMLZBT82CS56gn9UxnbwzhiYNYCEL68FqkdbPvVTU/JeC5FZYx
-lcvDYSkCgYEAy/r5ZNkHtxJdwGu7g+cr383UgsTkhovHw1XEVNHtZzyH7trn2Yln
-mBB+daShsdSwm30EhYRO2Gve+5S0oaUER7UtakqeAvKYY+5PeCyScp6HQedk8QrO
-MIUzKrmZGGocsf4D85p/BN4WjWbE3oVqrCtf3w3pO5FExi9hYmVwkQECgYALSScJ
-cAoxfPVJXbhpQzDGB1WnLfLo1V0+qBE+JGkL5iFPaFQCMJGlfXDlO6Smod20OYA4
-xl9ZbV101aTcRxQXkGKFspfxQzzJozLPFg6q6S6b9aa63HMe3T8lHPArFduzC4F9
-VgSwW01jLgrwC8LZibkBr3wlgrgQzLvOCANKaQKBgQDhEfRf5tD3U4e/70fqELJx
-+UOg+LYUHeClcvsqH9RAavH8P8X0xDHKZXAZWN6H6dz+INSrZP/j15LGURPb+Znz
-cV8UoDLH2qZV51ZH9XOYkLaqHhTDCwlztXC1wy9oCSt727wkagcUyz8kPv9Oy+mY
-U6IP/X8Kd8h47QUtTuiUVg==
------END PRIVATE KEY-----"#;
+use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+use rsa::{RsaPrivateKey, RsaPublicKey};
+use std::sync::OnceLock;
 
-/// Default RSA 2048 Public Key (PEM format) for development and testing environments.
-const DEV_RSA_PUBLIC_KEY_PEM: &str = r#"-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA477rTzerM8yY9UB1J3Yp
-J2zHfRzUZ1B+Xk9z5+JgM53vw4hfwThgGfGgPXr+L8MtvGW2Mxgpz8kKTbw5A9XY
-BNbTIjVdNmpTowUbcwV5z1W6bmTTRWIURiHzdoyT04WVWCjrj96E2+p+QavA/92Y
-+Vo7glTz3g/1Aq7Ia6BYryBIesmKiluy+gMGlo6w9E25dHByggvmVv0+e33uEjsp
-iZVkBegi36x/cKHjPRB/9LrABMwhxKc/x5cIDX0EkAV6+J5sTKa7EBtKxWU6Q37a
-A87eo7D63iVtKz9V2Tlu2Jvosc/7I6X8NngraI6tRAYTWotZ+JjZWXqJ4fQ6AEG/
-aQIDAQAB
------END PUBLIC KEY-----"#;
+/// Ephemeral in-memory RSA 2048 key pair generated lazily for development and testing environments
+/// when no environment variables or key files are provided.
+struct EphemeralKeyPair {
+    private_pem: String,
+    public_pem: String,
+}
+
+static EPHEMERAL_KEY_PAIR: OnceLock<EphemeralKeyPair> = OnceLock::new();
+
+fn get_ephemeral_key_pair() -> &'static EphemeralKeyPair {
+    EPHEMERAL_KEY_PAIR.get_or_init(|| {
+        let mut rng = rand::thread_rng();
+        let bits = 2048;
+        let private_key = RsaPrivateKey::new(&mut rng, bits)
+            .expect("Failed to generate ephemeral RSA 2048 private key");
+        let public_key = RsaPublicKey::from(&private_key);
+
+        let private_pem = private_key
+            .to_pkcs8_pem(LineEnding::LF)
+            .expect("Failed to encode ephemeral private key to PKCS8 PEM")
+            .to_string();
+
+        let public_pem = public_key
+            .to_public_key_pem(LineEnding::LF)
+            .expect("Failed to encode ephemeral public key to PEM")
+            .to_string();
+
+        EphemeralKeyPair {
+            private_pem,
+            public_pem,
+        }
+    })
+}
 
 /// Modern OAuth 2.0 / OIDC Role Hierarchy for Satellite API RBAC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
@@ -175,7 +172,7 @@ pub struct AuthResponse {
 /// Resolution order:
 /// 1. Direct PEM string from `RSA_PRIVATE_KEY` environment variable.
 /// 2. File path from `RSA_PRIVATE_KEY_FILE` environment variable or `.keys/rsa_private.pem`.
-/// 3. Built-in development RSA private key fallback.
+/// 3. Ephemeral in-memory RSA 2048 private key fallback.
 pub fn get_rsa_private_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PRIVATE_KEY") {
         if !pem.trim().is_empty() {
@@ -191,14 +188,14 @@ pub fn get_rsa_private_key_pem() -> String {
         }
     }
 
-    DEV_RSA_PRIVATE_KEY_PEM.to_string()
+    get_ephemeral_key_pair().private_pem.clone()
 }
 
 /// Returns the RSA 2048 public key PEM for verifying RS256 signatures.
 /// Resolution order:
 /// 1. Direct PEM string from `RSA_PUBLIC_KEY` environment variable.
 /// 2. File path from `RSA_PUBLIC_KEY_FILE` environment variable or `.keys/rsa_public.pem`.
-/// 3. Built-in development RSA public key fallback.
+/// 3. Ephemeral in-memory RSA 2048 public key fallback.
 pub fn get_rsa_public_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PUBLIC_KEY") {
         if !pem.trim().is_empty() {
@@ -214,7 +211,7 @@ pub fn get_rsa_public_key_pem() -> String {
         }
     }
 
-    DEV_RSA_PUBLIC_KEY_PEM.to_string()
+    get_ephemeral_key_pair().public_pem.clone()
 }
 
 /// Generates a strictly RS256-signed JWT token string and Claims struct with full OIDC/OAuth2 metadata.
