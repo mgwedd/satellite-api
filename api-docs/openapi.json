@@ -554,6 +554,102 @@
         ]
       }
     },
+    "/v1/satellites/{id}/doppler": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Get Satellite RF Doppler Shift",
+        "description": "Computes range rate (km/s), Doppler frequency shift (Hz), and corrected transmitter frequency for ground station tracking.",
+        "operationId": "getSatelliteDoppler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "center_freq_hz",
+            "in": "query",
+            "description": "Nominal satellite transmitter frequency in Hertz (e.g. 437500000 for 437.5 MHz UHF)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt_km",
+            "in": "query",
+            "description": "Observer altitude above sea level in km (default: 0.0)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "description": "UTC timestamp for calculation epoch (defaults to current time if omitted)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Doppler shift computed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DopplerResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/satellites/{id}/groundtrack": {
       "get": {
         "tags": [
@@ -981,6 +1077,46 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "DopplerResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "centerFreqHz",
+          "rangeRateKms",
+          "dopplerShiftHz",
+          "correctedFreqHz",
+          "signalDirection"
+        ],
+        "properties": {
+          "centerFreqHz": {
+            "type": "number",
+            "format": "double"
+          },
+          "correctedFreqHz": {
+            "type": "number",
+            "format": "double"
+          },
+          "dopplerShiftHz": {
+            "type": "number",
+            "format": "double"
+          },
+          "rangeRateKms": {
+            "type": "number",
+            "format": "double"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          },
+          "signalDirection": {
             "type": "string"
           }
         }
