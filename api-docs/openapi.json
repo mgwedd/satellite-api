@@ -93,7 +93,7 @@
         "tags": [
           "Authentication"
         ],
-        "summary": "OpenAPI endpoint handler to issue a JWT authentication token for testing or client auth.",
+        "summary": "OpenAPI endpoint handler to issue an RS256 JWT authentication token for testing or client auth.",
         "operationId": "loginHandler",
         "requestBody": {
           "content": {
@@ -107,7 +107,7 @@
         },
         "responses": {
           "200": {
-            "description": "JWT Token issued successfully",
+            "description": "RS256 JWT Token issued successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -135,7 +135,7 @@
           "Pipelines"
         ],
         "summary": "Trigger CelesTrak Pipeline Sync",
-        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth.",
+        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'admin' or 'operator' role).",
         "operationId": "triggerPipelineSync",
         "parameters": [
           {
@@ -162,6 +162,16 @@
           },
           "401": {
             "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -235,7 +245,7 @@
           "Satellites"
         ],
         "summary": "Create Satellite",
-        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth.",
+        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'admin' or 'operator' role).",
         "operationId": "createSatellite",
         "requestBody": {
           "content": {
@@ -270,6 +280,16 @@
           },
           "401": {
             "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -334,7 +354,7 @@
           "Satellites"
         ],
         "summary": "Delete Satellite",
-        "description": "Deletes a satellite record by its unique UUID. Protected by JWT auth.",
+        "description": "Deletes a satellite record by its unique UUID. Protected by JWT auth (requires 'admin' role).",
         "operationId": "deleteSatellite",
         "parameters": [
           {
@@ -354,6 +374,16 @@
           },
           "401": {
             "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Admin role required",
             "content": {
               "application/json": {
                 "schema": {
@@ -384,7 +414,7 @@
           "Satellites"
         ],
         "summary": "Update Satellite",
-        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth.",
+        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'admin' or 'operator' role).",
         "operationId": "updateSatellite",
         "parameters": [
           {
@@ -421,6 +451,16 @@
           },
           "401": {
             "description": "Unauthorized - Missing or invalid JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient role permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -635,7 +675,7 @@
     "schemas": {
       "AuthResponse": {
         "type": "object",
-        "description": "Response returned upon successful JWT token generation.",
+        "description": "Response returned upon successful RS256 JWT token generation.",
         "required": [
           "token",
           "tokenType",
@@ -653,7 +693,7 @@
           },
           "token": {
             "type": "string",
-            "description": "Encoded JWT Bearer token"
+            "description": "Encoded RS256 JWT Bearer token"
           },
           "tokenType": {
             "type": "string",
@@ -871,7 +911,7 @@
         "properties": {
           "role": {
             "type": "string",
-            "description": "Optional user role (defaults to \"operator\" if omitted)",
+            "description": "Optional user role (\"operator\" or \"admin\", defaults to \"operator\")",
             "nullable": true
           },
           "username": {
