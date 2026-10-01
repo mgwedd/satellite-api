@@ -1,60 +1,56 @@
 use astrea_sda_api::{
-    models::{AnomalySeverity, Satellite, Tle},
-    services::maneuver,
+    models::{AnomalyStatus, ManeuverType, Satellite, Tle},
+    services::maneuver::{detect_anomalies, reconstruct_maneuvers},
 };
-use chrono::{TimeZone, Utc};
 use uuid::Uuid;
 
-fn sample_satellite() -> Satellite {
+fn sat(name: &str, line1: &str, line2: &str) -> Satellite {
     Satellite {
-        id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-        name: "ISS (ZARYA)".to_string(),
+        id: Uuid::new_v4(),
+        name: name.to_string(),
         tle: Tle {
-            line_one: "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994"
-                .to_string(),
-            line_two: "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397"
-                .to_string(),
+            line_one: line1.to_string(),
+            line_two: line2.to_string(),
         },
-        created_date: Utc::now(),
-        last_modified_date: Utc::now(),
+        created_date: chrono::Utc::now(),
+        last_modified_date: chrono::Utc::now(),
     }
 }
 
 #[test]
-fn test_detect_orbital_maneuvers() {
-    let sat = sample_satellite();
-    let start_time = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-    let end_time = Utc.with_ymd_and_hms(2024, 1, 7, 0, 0, 0).unwrap();
-    let min_delta_v_ms = 0.1;
+fn test_single_tle_returns_zero_maneuvers_and_insufficient_data() {
+    let s = sat(
+        "ATLAS CENTAUR 2",
+        "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
+        "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397",
+    );
+    let history = [s.tle.clone()];
 
-    let response = maneuver::reconstruct_maneuvers(&sat, start_time, end_time, min_delta_v_ms)
-        .expect("Maneuver reconstruction failed");
+    let res = reconstruct_maneuvers(&s, &history, None, None, 0.1, 0.005).unwrap();
+    assert_eq!(res.total_maneuvers_detected, 0);
 
-    assert_eq!(response.satellite_id, sat.id);
-    assert_eq!(response.satellite_name, "ISS (ZARYA)");
-    assert!(response.cumulative_delta_v_ms >= 0.0);
+    let anom = detect_anomalies(&s, &history, 3.0, 0.1, 0.005).unwrap();
+    assert_eq!(anom.status, AnomalyStatus::InsufficientData);
 }
 
 #[test]
-fn test_detect_anomalies_report() {
-    let sat = sample_satellite();
-    let threshold_sigma = 3.0;
-    let min_sma_change_km = 0.5;
-    let min_inc_change_deg = 0.01;
-
-    let response = maneuver::detect_anomalies(
-        &sat,
-        Some(threshold_sigma),
-        Some(min_sma_change_km),
-        Some(min_inc_change_deg),
-    )
-    .expect("Anomaly detection failed");
-
-    assert_eq!(response.satellite_id, sat.id);
-    assert!(
-        response.severity == AnomalySeverity::Nominal
-            || response.severity == AnomalySeverity::Warning
-            || response.severity == AnomalySeverity::Critical
+fn test_maneuver_reconstruction_with_synthetic_tle_pair() {
+    let s = sat(
+        "ATLAS CENTAUR 2",
+        "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
+        "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397",
     );
-    assert!(!response.recommendation.is_empty());
+    let tle2 = Tle {
+        line_one: "00694U 63047A   21240.66170074  .00000250  00000-0  20987-4 0  9996".to_string(),
+        line_two: "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.00000000898397".to_string(),
+    };
+    let history = [s.tle.clone(), tle2];
+
+    let res = reconstruct_maneuvers(&s, &history, None, None, 0.1, 0.005).unwrap();
+    assert_eq!(res.tle_epochs_analyzed, 2);
+    assert!(res.total_maneuvers_detected >= 1);
+    assert_eq!(
+        res.maneuvers[0].maneuver_type,
+        ManeuverType::SemiMajorAxisIncrease
+    );
 }

@@ -7,7 +7,7 @@ use crate::services::astrodynamics::normalize_tle_line;
 use chrono::{DateTime, Utc};
 use sgp4::Elements;
 
-const MU_KM3_S2: f64 = 398_600.4418;
+const MU_KM3_S2: f64 = 398_600.441_8;
 
 /// Below this many residuals, median/MAD statistics are not meaningful and no verdict is given.
 pub const MIN_RESIDUALS_FOR_STATISTICS: usize = 5;
@@ -93,8 +93,8 @@ pub fn reconstruct_maneuvers(
 
     let maneuvers: Vec<DetectedManeuver> = residuals
         .windows(2)
-        .filter(|w| start_time.map_or(true, |s| w[1].epoch >= s))
-        .filter(|w| end_time.map_or(true, |e| w[1].epoch <= e))
+        .filter(|w| start_time.is_none_or(|s| w[1].epoch >= s))
+        .filter(|w| end_time.is_none_or(|e| w[1].epoch <= e))
         .filter_map(|w| {
             let da = w[1].semi_major_axis_residual_km?;
             let di = w[1].inclination_change_deg?;
@@ -128,7 +128,7 @@ pub fn reconstruct_maneuvers(
 
 fn median(sorted: &[f64]) -> f64 {
     let m = sorted.len() / 2;
-    if sorted.len() % 2 == 0 {
+    if sorted.len().is_multiple_of(2) {
         (sorted[m - 1] + sorted[m]) / 2.0
     } else {
         sorted[m]
@@ -185,7 +185,8 @@ pub fn detect_anomalies(
     let z_inc = robust_z_scores(&pairs.iter().map(|p| p.1).collect::<Vec<_>>());
     // residuals[0] has no predecessor, so pairs[k] belongs to residuals[k + 1].
     for (k, (da, di)) in pairs.iter().enumerate() {
-        residuals[k + 1].is_anomaly = (da.abs() >= min_sma_change_km && z_sma[k] >= threshold_sigma)
+        residuals[k + 1].is_anomaly = (da.abs() >= min_sma_change_km
+            && z_sma[k] >= threshold_sigma)
             || (di.abs() >= min_inc_change_deg && z_inc[k] >= threshold_sigma);
     }
     let anomalies_detected = residuals.iter().filter(|r| r.is_anomaly).count();

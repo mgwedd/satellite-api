@@ -27,7 +27,10 @@ fn test_generate_ground_track_direct() {
         last_modified_date: chrono::Utc::now(),
     };
 
-    let res = astrodynamics::generate_ground_track(&sat, chrono::Utc::now(), 30, 60, true, true);
+    let start_time = chrono::DateTime::parse_from_rfc3339("2021-08-27T12:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let res = astrodynamics::generate_ground_track(&sat, start_time, 30, 60, true, true);
     assert!(
         res.is_ok(),
         "Expected groundtrack generation to succeed: {:?}",
@@ -97,7 +100,7 @@ async fn test_groundtrack_endpoint_and_geojson() {
     let req = Request::builder()
         .method("GET")
         .uri(format!(
-            "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=all",
+            "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=all&start_time=2021-08-27T12:00:00Z",
             sat_id
         ))
         .body(Body::empty())

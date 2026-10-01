@@ -657,13 +657,18 @@ pub async fn get_satellite_maneuvers(
     Query(params): Query<ManeuverQueryParams>,
 ) -> Result<Json<ManeuversResponse>, AppError> {
     let satellite = repo.get_satellite_by_id(id).await?;
-    let start_time = params
-        .start_time
-        .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
-    let end_time = params.end_time.unwrap_or_else(Utc::now);
-    let min_dv = params.min_delta_v_ms.unwrap_or(0.1);
+    let min_sma = params.min_sma_change_km.unwrap_or(0.1);
+    let min_inc = params.min_inclination_change_deg.unwrap_or(0.005);
+    let history = [satellite.tle.clone()];
 
-    let res = maneuver::reconstruct_maneuvers(&satellite, start_time, end_time, min_dv)?;
+    let res = maneuver::reconstruct_maneuvers(
+        &satellite,
+        &history,
+        params.start_time,
+        params.end_time,
+        min_sma,
+        min_inc,
+    )?;
     Ok(Json(res))
 }
 
@@ -692,13 +697,14 @@ pub async fn detect_satellite_anomalies(
     let satellite = repo.get_satellite_by_id(id).await?;
     let (sigma, sma, inc) = match body {
         Some(Json(req)) => (
-            req.threshold_sigma,
-            req.min_sma_change_km,
-            req.min_inclination_change_deg,
+            req.threshold_sigma.unwrap_or(3.0),
+            req.min_sma_change_km.unwrap_or(0.1),
+            req.min_inclination_change_deg.unwrap_or(0.005),
         ),
-        None => (None, None, None),
+        None => (3.0, 0.1, 0.005),
     };
+    let history = [satellite.tle.clone()];
 
-    let res = maneuver::detect_anomalies(&satellite, sigma, sma, inc)?;
+    let res = maneuver::detect_anomalies(&satellite, &history, sigma, sma, inc)?;
     Ok(Json(res))
 }

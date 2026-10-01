@@ -903,6 +903,7 @@
           {
             "name": "startTime",
             "in": "query",
+            "description": "Only report windows ending at or after this time",
             "required": false,
             "schema": {
               "type": "string",
@@ -913,6 +914,7 @@
           {
             "name": "endTime",
             "in": "query",
+            "description": "Only report windows ending at or before this time",
             "required": false,
             "schema": {
               "type": "string",
@@ -921,8 +923,20 @@
             }
           },
           {
-            "name": "minDeltaVMs",
+            "name": "minSmaChangeKm",
             "in": "query",
+            "description": "Minimum |semi-major axis residual| in km (default 0.1)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "minInclinationChangeDeg",
+            "in": "query",
+            "description": "Minimum |inclination change| in degrees (default 0.005)",
             "required": false,
             "schema": {
               "type": "number",
@@ -1060,6 +1074,7 @@
           "thresholdSigma": {
             "type": "number",
             "format": "double",
+            "description": "Robust z-score (median/MAD) threshold (default 3.0)",
             "nullable": true
           }
         }
@@ -1069,23 +1084,14 @@
         "required": [
           "satelliteId",
           "satelliteName",
-          "severity",
+          "status",
           "anomaliesDetected",
-          "maxResidualSigma",
-          "residualHistory",
-          "recommendation"
+          "residualHistory"
         ],
         "properties": {
           "anomaliesDetected": {
             "type": "integer",
             "minimum": 0
-          },
-          "maxResidualSigma": {
-            "type": "number",
-            "format": "double"
-          },
-          "recommendation": {
-            "type": "string"
           },
           "residualHistory": {
             "type": "array",
@@ -1100,17 +1106,17 @@
           "satelliteName": {
             "type": "string"
           },
-          "severity": {
-            "$ref": "#/components/schemas/AnomalySeverity"
+          "status": {
+            "$ref": "#/components/schemas/AnomalyStatus"
           }
         }
       },
-      "AnomalySeverity": {
+      "AnomalyStatus": {
         "type": "string",
         "enum": [
           "Nominal",
-          "Warning",
-          "Critical"
+          "AnomalyDetected",
+          "InsufficientData"
         ]
       },
       "AuthResponse": {
@@ -1272,87 +1278,37 @@
           }
         }
       },
-      "DeltaVComponents": {
-        "type": "object",
-        "required": [
-          "radialMs",
-          "tangentialMs",
-          "normalMs"
-        ],
-        "properties": {
-          "normalMs": {
-            "type": "number",
-            "format": "double",
-            "description": "Normal / cross-track component of delta-V vector in m/s (out of orbital plane)"
-          },
-          "radialMs": {
-            "type": "number",
-            "format": "double",
-            "description": "Radial component of delta-V vector in m/s (along position vector)"
-          },
-          "tangentialMs": {
-            "type": "number",
-            "format": "double",
-            "description": "Tangential / along-track component of delta-V vector in m/s (along velocity direction)"
-          }
-        }
-      },
       "DetectedManeuver": {
         "type": "object",
+        "description": "A candidate maneuver: an element discontinuity between two consecutive TLEs that\nexceeds the requested thresholds. It happened somewhere inside the window; TLEs\ncannot localise it further. Unmodelled drag or TLE fit errors can also cause one.",
         "required": [
-          "maneuverId",
-          "satelliteId",
-          "satelliteName",
-          "detectedAtEpoch",
-          "totalDeltaVMs",
-          "deltaVComponents",
-          "maneuverType",
-          "semiMajorAxisChangeKm",
+          "windowStart",
+          "windowEnd",
+          "semiMajorAxisResidualKm",
           "inclinationChangeDeg",
-          "confidenceScore"
+          "maneuverType"
         ],
         "properties": {
-          "confidenceScore": {
-            "type": "number",
-            "format": "double"
-          },
-          "deltaVComponents": {
-            "$ref": "#/components/schemas/DeltaVComponents"
-          },
-          "detectedAtEpoch": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "estimatedFuelUsedKg": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
           "inclinationChangeDeg": {
             "type": "number",
-            "format": "double"
-          },
-          "maneuverId": {
-            "type": "string",
-            "format": "uuid"
+            "format": "double",
+            "description": "Observed mean inclination change, in degrees"
           },
           "maneuverType": {
             "$ref": "#/components/schemas/ManeuverType"
           },
-          "satelliteId": {
+          "semiMajorAxisResidualKm": {
+            "type": "number",
+            "format": "double",
+            "description": "Observed mean semi-major axis minus the value predicted by the earlier TLE's\nmean-motion derivatives, in km"
+          },
+          "windowEnd": {
             "type": "string",
-            "format": "uuid"
+            "format": "date-time"
           },
-          "satelliteName": {
-            "type": "string"
-          },
-          "semiMajorAxisChangeKm": {
-            "type": "number",
-            "format": "double"
-          },
-          "totalDeltaVMs": {
-            "type": "number",
-            "format": "double"
+          "windowStart": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -1614,13 +1570,12 @@
       },
       "ManeuverType": {
         "type": "string",
+        "description": "Observed element change between two consecutive TLEs. Describes what changed, not why:\nburn intent (stationkeeping, collision avoidance, ...) is not observable from TLEs.",
         "enum": [
-          "OrbitRaising",
+          "SemiMajorAxisIncrease",
+          "SemiMajorAxisDecrease",
           "InclinationChange",
-          "Stationkeeping",
-          "CollisionAvoidance",
-          "DeorbitBurn",
-          "Unknown"
+          "Combined"
         ]
       },
       "ManeuversResponse": {
@@ -1628,15 +1583,11 @@
         "required": [
           "satelliteId",
           "satelliteName",
+          "tleEpochsAnalyzed",
           "totalManeuversDetected",
-          "cumulativeDeltaVMs",
           "maneuvers"
         ],
         "properties": {
-          "cumulativeDeltaVMs": {
-            "type": "number",
-            "format": "double"
-          },
           "maneuvers": {
             "type": "array",
             "items": {
@@ -1649,6 +1600,10 @@
           },
           "satelliteName": {
             "type": "string"
+          },
+          "tleEpochsAnalyzed": {
+            "type": "integer",
+            "minimum": 0
           },
           "totalManeuversDetected": {
             "type": "integer",
@@ -1704,27 +1659,18 @@
       },
       "OrbitalParameterResidual": {
         "type": "object",
+        "description": "Mean elements of one TLE and, for every TLE after the first, its change from the previous.",
         "required": [
           "epoch",
-          "semiMajorAxisKm",
+          "meanSemiMajorAxisKm",
           "inclinationDeg",
           "meanMotionRevday",
           "eccentricity",
           "bstarDrag",
-          "deltaSemiMajorAxisKm",
-          "deltaInclinationDeg",
           "isAnomaly"
         ],
         "properties": {
           "bstarDrag": {
-            "type": "number",
-            "format": "double"
-          },
-          "deltaInclinationDeg": {
-            "type": "number",
-            "format": "double"
-          },
-          "deltaSemiMajorAxisKm": {
             "type": "number",
             "format": "double"
           },
@@ -1735,6 +1681,11 @@
           "epoch": {
             "type": "string",
             "format": "date-time"
+          },
+          "inclinationChangeDeg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           },
           "inclinationDeg": {
             "type": "number",
@@ -1747,9 +1698,14 @@
             "type": "number",
             "format": "double"
           },
-          "semiMajorAxisKm": {
+          "meanSemiMajorAxisKm": {
             "type": "number",
             "format": "double"
+          },
+          "semiMajorAxisResidualKm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         }
       },
