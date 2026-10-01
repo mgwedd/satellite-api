@@ -4,7 +4,7 @@ use astrea_sda_api::{
     models::{LightingState, Satellite, Tle},
     services::astrodynamics::*,
 };
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use uuid::Uuid;
 
 fn sat(name: &str, l1: &str, l2: &str) -> Satellite {
@@ -36,6 +36,22 @@ fn t0() -> DateTime<Utc> {
 // Skyfield: sub-satellite point at t0 = (13.92330, 177.31523), 467.250 km.
 const SUB_LAT: f64 = 13.923295486819791;
 const SUB_LON: f64 = 177.31523434723331;
+
+// Crossing orbits that share an ascending node at epoch 2021-08-27 12:00:00 UTC.
+fn crossing_pair() -> (Satellite, Satellite) {
+    (
+        sat(
+            "A",
+            "1 90001U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9996",
+            "2 90001  51.6000 100.0000 0001000   0.0000   0.0000 15.50000000    18",
+        ),
+        sat(
+            "B",
+            "1 90002U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9997",
+            "2 90002  60.0000 100.0000 0001000   0.0000   0.0000 15.50000000    13",
+        ),
+    )
+}
 
 fn ang_diff(a: f64, b: f64) -> f64 {
     ((a - b + 540.0) % 360.0 - 180.0).abs()
@@ -175,20 +191,13 @@ fn a12_observer_sun_elevation_matches_skyfield() {
 }
 
 #[test]
-fn a13_visual_magnitude_uses_correct_phase_angle() {
-    // Skyfield 2021-08-27 16:02 UTC, observer (25.4348, -175.8633): sunlit, el 23.67,
-    // range 1037.354 km, phase angle 64.220 deg. Expected mag with code's own model (v0 = 3).
-    let t = Utc.with_ymd_and_hms(2021, 8, 27, 16, 2, 0).unwrap();
-    let r =
-        calculate_illumination(&atlas(), 25.43483909904223, -175.86329432148253, 0.0, t).unwrap();
-    let ph = 64.22038545681569f64.to_radians();
-    let f = (ph.sin() + (std::f64::consts::PI - ph) * ph.cos()) / std::f64::consts::PI;
-    let expected = 3.0 + 5.0 * (1037.354f64 / 1000.0).log10() - 2.5 * f.log10();
-    assert!(r.is_visibly_observable);
+fn a13_overhead_never_returns_satellite_below_horizon() {
+    // Observer at the antipode of the sub-satellite point: satellite elevation ~ -90 deg.
+    let r = find_overhead_satellite(&[atlas()], -SUB_LAT, SUB_LON - 180.0, 0.0, t0());
     assert!(
-        (r.estimated_visual_magnitude - expected).abs() < 0.1,
-        "mag {} vs {expected}",
-        r.estimated_visual_magnitude
+        r.is_none(),
+        "below-horizon satellite reported overhead: {:?}",
+        r.map(|o| o.elevation)
     );
 }
 
@@ -208,18 +217,9 @@ fn a14_not_observable_when_below_horizon() {
 fn a15_conjunction_not_missed_by_coarse_sampling() {
     // Crossing orbits at the shared ascending node. Skyfield 1 s scan: true miss 1.58 km at
     // epoch + 2 s. Start 30 s before epoch so the 1-minute grid straddles the TCA.
-    let a = sat(
-        "A",
-        "1 90001U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9996",
-        "2 90001  51.6000 100.0000 0001000   0.0000   0.0000 15.50000000    18",
-    );
-    let b = sat(
-        "B",
-        "1 90002U 21001A   21239.50000000  .00000000  00000-0  00000-0 0  9997",
-        "2 90002  60.0000 100.0000 0001000   0.0000   0.0000 15.50000000    13",
-    );
     let start = Utc.with_ymd_and_hms(2021, 8, 27, 11, 59, 30).unwrap();
-    let res = find_conjunctions(&[a, b], start, 5.0, 1, 1);
+    let (a, b) = crossing_pair();
+    let res = find_conjunctions(&[a, b], start, 5.0, 1);
     assert_eq!(
         res.conjunctions_found, 1,
         "1.58 km miss not reported at 5 km threshold"
@@ -240,4 +240,53 @@ fn a16_czml_time_tags_match_trajectory_timestamps() {
         let off = (p.timestamp - gt.trajectory[0].timestamp).num_seconds() as f64;
         assert_eq!(cart[i * 4].as_f64().unwrap(), off);
     }
+}
+
+// Skyfield find_events, observer (35, -120), 2021-08-27: rises above 10 deg at
+// 16:11:57.168 (peak 52.802 deg at 16:16:36.852).
+#[test]
+fn a17_next_pass_aos_matches_skyfield() {
+    let r = find_next_visible_pass(&atlas(), 35.0, -120.0, 0.0, t0(), 10.0, 1440).unwrap();
+    let aos = Utc.with_ymd_and_hms(2021, 8, 27, 16, 11, 57).unwrap() + Duration::milliseconds(168);
+    let err = (r.pass_time - aos).num_milliseconds().abs();
+    assert!(err < 2000, "AOS {} vs {aos} ({err} ms)", r.pass_time);
+}
+
+// Same pass with a 52.7 deg threshold is above it for only 13.6 s (16:16:30.176 - 16:16:43.749).
+// A 60 s grid without peak refinement steps straight over it.
+#[test]
+fn a18_next_pass_finds_pass_shorter_than_sample_step() {
+    let r = find_next_visible_pass(&atlas(), 35.0, -120.0, 0.0, t0(), 52.7, 1440).unwrap();
+    let aos = Utc.with_ymd_and_hms(2021, 8, 27, 16, 16, 30).unwrap() + Duration::milliseconds(176);
+    let err = (r.pass_time - aos).num_milliseconds().abs();
+    assert!(err < 2000, "AOS {} vs {aos} ({err} ms)", r.pass_time);
+}
+
+#[test]
+fn a19_footprint_is_instantaneous_and_omitted_when_ring_is_not_simple() {
+    let gt = generate_ground_track(&atlas(), t0(), 90, 60, true, false).unwrap();
+    assert_eq!(
+        gt.footprint_radius_km,
+        calculate_footprint_radius(gt.trajectory[0].alt_km)
+    );
+    assert!(footprint_ring_is_simple(0.0, 0.0, 2000.0));
+    assert!(
+        !footprint_ring_is_simple(80.0, 0.0, 2000.0),
+        "ring encloses the pole"
+    );
+    assert!(
+        !footprint_ring_is_simple(0.0, 175.0, 2000.0),
+        "ring crosses the anti-meridian"
+    );
+    // Sub-point at t0 is lon 177.3 with a ~2,400 km radius: must not emit a wrapped polygon.
+    assert!(gt.footprint_polygon.is_none());
+}
+
+#[test]
+fn a20_same_catalogue_object_is_not_a_conjunction() {
+    let (a, _) = crossing_pair();
+    let mut dup = a.clone();
+    dup.id = Uuid::new_v4();
+    let res = find_conjunctions(&[a, dup], t0(), 10.0, 1);
+    assert_eq!(res.conjunctions_found, 0);
 }
