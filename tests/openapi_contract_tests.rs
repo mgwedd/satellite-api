@@ -66,6 +66,11 @@ fn test_openapi_schema_static_contract() {
         "Missing or invalid operationId for GET /v1/satellites/{{id}}/groundtrack"
     );
     assert!(
+        paths["/v1/satellites/{id}/illumination"]["get"]["operationId"].as_str()
+            == Some("getSatelliteIllumination"),
+        "Missing or invalid operationId for GET /v1/satellites/{{id}}/illumination"
+    );
+    assert!(
         paths["/v1/pipelines/sync"]["post"]["operationId"].as_str() == Some("triggerPipelineSync"),
         "Missing or invalid operationId for POST /v1/pipelines/sync"
     );
@@ -87,6 +92,9 @@ fn test_openapi_schema_static_contract() {
         "GroundTrackPoint",
         "GeoJsonFeature",
         "GeoJsonGeometry",
+        "IlluminationResponse",
+        "LightingState",
+        "ObserverTwilightState",
         "PipelineSyncResponse",
         "PaginationMeta",
         "PaginatedResponseSatellite",

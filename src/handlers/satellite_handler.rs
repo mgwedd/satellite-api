@@ -1,8 +1,8 @@
 use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
-    CreateSatelliteDto, GroundTrackResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
-    UpdateSatelliteDto,
+    CreateSatelliteDto, GroundTrackResponse, IlluminationResponse, NextVisiblePassResponse,
+    OverheadResponse, Satellite, UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
@@ -430,6 +430,68 @@ pub async fn get_ground_track(
             .map_err(|e| e.to_string())?;
 
             track_res.map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(AppError::InternalServerError)?;
+
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct IlluminationQueryParams {
+    /// Observer latitude in decimal degrees (-90.0 to 90.0)
+    pub lat: f64,
+    /// Observer longitude in decimal degrees (-180.0 to 180.0)
+    pub lon: f64,
+    /// Observer altitude above sea level in meters (default: 0.0 m)
+    pub alt: Option<f64>,
+    /// UTC timestamp for calculation epoch (defaults to current time if omitted)
+    pub time: Option<DateTime<Utc>>,
+}
+
+/// Get Satellite Illumination & Visual Magnitude
+///
+/// Computes solar shadow geometry (FullSunlight, Penumbra, Umbra), observer twilight state, observable status, and visual magnitude.
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}/illumination",
+    operation_id = "getSatelliteIllumination",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier"),
+        IlluminationQueryParams
+    ),
+    responses(
+        (status = 200, description = "Satellite illumination status computed successfully", body = IlluminationResponse),
+        (status = 404, description = "Satellite not found", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_satellite_illumination(
+    State(repo): State<SatelliteRepository>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<IlluminationQueryParams>,
+) -> Result<Json<IlluminationResponse>, AppError> {
+    let satellite = repo.get_satellite_by_id(id).await?;
+    let time = params.time.unwrap_or_else(Utc::now);
+    let alt = params.alt.unwrap_or(0.0);
+
+    let time_bucket = time.timestamp() / 10;
+    let cache_key = format!(
+        "illumination:{}:{:.2}:{:.2}:{:.1}:{}",
+        id, params.lat, params.lon, alt, time_bucket
+    );
+
+    let res = repo
+        .cache
+        .get_or_insert_with(&cache_key, || async move {
+            let sat_clone = satellite.clone();
+            let illum_res = tokio::task::spawn_blocking(move || {
+                astrodynamics::calculate_illumination(&sat_clone, params.lat, params.lon, alt, time)
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            illum_res.map_err(|e| e.to_string())
         })
         .await
         .map_err(AppError::InternalServerError)?;
