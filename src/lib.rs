@@ -8,6 +8,7 @@ pub mod repository;
 pub mod services;
 
 use axum::{
+    response::{Html, Redirect},
     routing::{get, post},
     Router,
 };
@@ -80,7 +81,24 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);
 
+    const REDOC_HTML: &str = r#"<!DOCTYPE html>
+<html>
+  <head>
+    <title>Satellite API - Interactive OpenAPI Documentation</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; }</style>
+  </head>
+  <body>
+    <redoc spec-url='/api-docs/openapi.json' expand-responses="200,201"></redoc>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
+  </body>
+</html>"#;
+
     Router::new()
+        .route("/", get(|| async { Redirect::temporary("/swagger-ui/") }))
+        .route("/docs", get(|| async { Html(REDOC_HTML) }))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest("/v1", api_routes)
         .layer(CorsLayer::permissive())

@@ -132,4 +132,38 @@ async fn test_openapi_and_swagger_ui_endpoints() {
 
     let response = app.clone().oneshot(req).await.unwrap();
     assert!(response.status().is_success() || response.status().is_redirection());
+
+    // 3. Verify Root GET / redirects to Swagger UI
+    let req = Request::builder()
+        .method("GET")
+        .uri("/")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(
+        response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "/swagger-ui/"
+    );
+
+    // 4. Verify GET /docs returns Redoc HTML page
+    let req = Request::builder()
+        .method("GET")
+        .uri("/docs")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
+    assert!(body_str.contains("redoc"));
 }

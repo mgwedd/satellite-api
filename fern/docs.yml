@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://schema.buildwithfern.dev/docs-yml.json
+instances:
+  - url: satellite-api.docs.buildwithfern.com
+title: Satellite API | Astrodynamics & Orbit Propagation Platform
+navigation:
+  - api: API Reference
+colors:
+  accent-primary: "#2563eb"
