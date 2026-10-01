@@ -770,4 +770,3 @@ pub fn find_conjunctions(
         results: sorted_matches,
     }
 }
-

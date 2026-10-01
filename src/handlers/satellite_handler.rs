@@ -565,4 +565,3 @@ pub async fn search_conjunctions(
 
     Ok(Json(res))
 }
-

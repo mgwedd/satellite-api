@@ -179,4 +179,3 @@ pub struct ConjunctionSearchResponse {
     pub conjunctions_found: usize,
     pub results: Vec<ConjunctionMatch>,
 }
-
