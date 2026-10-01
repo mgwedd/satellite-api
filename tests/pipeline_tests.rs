@@ -30,3 +30,50 @@ TIANGONG (CSS)
         "1 48274U 21035A   21239.50000000  .00010000  00000-0  10000-3 0  9991"
     );
 }
+
+#[test]
+fn test_parse_omm_json_response_with_6_digit_catalog_number() {
+    let json_data = r#"[
+        {
+            "OBJECT_NAME": "ELECTRON KICK STAGE R/B",
+            "OBJECT_ID": "2026-223C",
+            "EPOCH": "2026-09-30T22:59:27.056256",
+            "MEAN_MOTION": 15.04386585,
+            "ECCENTRICITY": 0.00182254,
+            "INCLINATION": 37.8692,
+            "RA_OF_ASC_NODE": 254.7608,
+            "ARG_OF_PERICENTER": 322.1735,
+            "MEAN_ANOMALY": 37.7742,
+            "EPHEMERIS_TYPE": 0,
+            "CLASSIFICATION_TYPE": "U",
+            "NORAD_CAT_ID": 100831,
+            "ELEMENT_SET_NO": 999,
+            "REV_AT_EPOCH": 74,
+            "BSTAR": 0.00018750396,
+            "MEAN_MOTION_DOT": 0.00002571,
+            "MEAN_MOTION_DDOT": 0.0
+        }
+    ]"#;
+
+    let parsed = DiscoveryPipeline::parse_discovery_response(json_data);
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].name, "ELECTRON KICK STAGE R/B");
+    assert!(parsed[0].line_one.starts_with("1 00831U"));
+    assert!(parsed[0].line_two.starts_with("2 00831"));
+
+    // Verify SGP4 parser accepts generated TLE lines
+    let line1 =
+        astrea_sda_api::services::astrodynamics::normalize_tle_line(&parsed[0].line_one, '1');
+    let line2 =
+        astrea_sda_api::services::astrodynamics::normalize_tle_line(&parsed[0].line_two, '2');
+    let elem_res = sgp4::Elements::from_tle(
+        Some(parsed[0].name.clone()),
+        line1.as_bytes(),
+        line2.as_bytes(),
+    );
+    assert!(
+        elem_res.is_ok(),
+        "Expected SGP4 parser to succeed on 6-digit catalog TLE: {:?}",
+        elem_res.err()
+    );
+}
