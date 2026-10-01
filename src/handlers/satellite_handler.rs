@@ -1,13 +1,15 @@
 use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
-    ConjunctionSearchResponse, CreateSatelliteDto, DopplerResponse, GroundTrackResponse,
-    IlluminationResponse, NextVisiblePassResponse, OverheadResponse, Satellite, UpdateSatelliteDto,
+    AnomalyDetectionRequest, AnomalyDetectionResponse, ConjunctionSearchResponse,
+    CreateSatelliteDto, DopplerResponse, GroundTrackResponse, IlluminationResponse,
+    ManeuverQueryParams, ManeuversResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
+    UpdateSatelliteDto,
 };
 use crate::pagination::{PaginatedResponse, PaginationQuery};
 use crate::repository::SatelliteRepository;
-use crate::services::astrodynamics;
 use crate::services::pipeline::{CelesTrakGroup, DiscoveryPipeline};
+use crate::services::{astrodynamics, maneuver};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -634,5 +636,74 @@ pub async fn get_satellite_doppler(
         .await
         .map_err(AppError::InternalServerError)?;
 
+    Ok(Json(res))
+}
+
+/// Reconstruct Satellite Orbital Maneuvers
+///
+/// Detects trajectory step discontinuities and calculates delta-V vector components, fuel consumption, and maneuver classification.
+#[utoipa::path(
+    get,
+    path = "/v1/satellites/{id}/maneuvers",
+    operation_id = "getSatelliteManeuvers",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier"),
+        ManeuverQueryParams
+    ),
+    responses(
+        (status = 200, description = "Orbital maneuvers reconstructed successfully", body = ManeuversResponse),
+        (status = 404, description = "Satellite not found", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn get_satellite_maneuvers(
+    State(repo): State<SatelliteRepository>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<ManeuverQueryParams>,
+) -> Result<Json<ManeuversResponse>, AppError> {
+    let satellite = repo.get_satellite_by_id(id).await?;
+    let start_time = params
+        .start_time
+        .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
+    let end_time = params.end_time.unwrap_or_else(Utc::now);
+    let min_dv = params.min_delta_v_ms.unwrap_or(0.1);
+
+    let res = maneuver::reconstruct_maneuvers(&satellite, start_time, end_time, min_dv)?;
+    Ok(Json(res))
+}
+
+/// Detect Satellite Trajectory Anomalies
+///
+/// Performs statistical residual analysis across TLE epoch parameters to identify non-natural trajectory anomalies.
+#[utoipa::path(
+    post,
+    path = "/v1/satellites/{id}/detect-anomalies",
+    operation_id = "detectSatelliteAnomalies",
+    params(
+        ("id" = Uuid, Path, description = "Satellite unique UUID identifier")
+    ),
+    request_body = Option<AnomalyDetectionRequest>,
+    responses(
+        (status = 200, description = "Anomaly detection report generated successfully", body = AnomalyDetectionResponse),
+        (status = 404, description = "Satellite not found", body = ErrorResponse)
+    ),
+    tag = "Astrodynamics"
+)]
+pub async fn detect_satellite_anomalies(
+    State(repo): State<SatelliteRepository>,
+    Path(id): Path<Uuid>,
+    body: Option<Json<AnomalyDetectionRequest>>,
+) -> Result<Json<AnomalyDetectionResponse>, AppError> {
+    let satellite = repo.get_satellite_by_id(id).await?;
+    let (sigma, sma, inc) = match body {
+        Some(Json(req)) => (
+            req.threshold_sigma,
+            req.min_sma_change_km,
+            req.min_inclination_change_deg,
+        ),
+        None => (None, None, None),
+    };
+
+    let res = maneuver::detect_anomalies(&satellite, sigma, sma, inc)?;
     Ok(Json(res))
 }
