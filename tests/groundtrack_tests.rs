@@ -52,8 +52,8 @@ async fn test_groundtrack_endpoint_and_geojson() {
 
     // 0. Login to obtain JWT Bearer Token
     let login_payload = json!({
-        "username": "groundtrack_tester",
-        "role": "admin"
+        "email": "admin@astrea.local",
+        "password": "password123"
     });
 
     let req = Request::builder()

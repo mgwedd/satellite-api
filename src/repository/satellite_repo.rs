@@ -4,65 +4,55 @@ use crate::models::{CreateSatelliteDto, Satellite, Tle, UpdateSatelliteDto};
 use crate::pagination::{
     CheckpointCursor, IdentifiableCheckpoint, PaginatedResponse, PaginationMeta, PaginationQuery,
 };
-use chrono::Utc;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use crate::repository::data_provider::{
+    DataProvider, MemoryDataProvider, SupabasePostgresDataProvider,
+};
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct SatelliteRepository {
-    store: Arc<RwLock<HashMap<Uuid, Satellite>>>,
+    pub provider: Arc<dyn DataProvider>,
     pub cache: TieredCache,
 }
 
 impl SatelliteRepository {
     pub async fn new(redis_url: Option<&str>) -> Self {
         let cache = TieredCache::new(redis_url, Duration::from_secs(300)).await;
-        Self {
-            store: Arc::new(RwLock::new(HashMap::new())),
-            cache,
-        }
+
+        let provider: Arc<dyn DataProvider> = if let Ok(db_url) = std::env::var("DATABASE_URL") {
+            if !db_url.trim().is_empty() {
+                if let Ok(pg) = SupabasePostgresDataProvider::connect(&db_url).await {
+                    Arc::new(pg)
+                } else {
+                    Arc::new(MemoryDataProvider::new())
+                }
+            } else {
+                Arc::new(MemoryDataProvider::new())
+            }
+        } else {
+            Arc::new(MemoryDataProvider::new())
+        };
+
+        Self { provider, cache }
+    }
+
+    pub fn with_provider(provider: Arc<dyn DataProvider>, cache: TieredCache) -> Self {
+        Self { provider, cache }
     }
 
     pub async fn create_satellite(&self, dto: CreateSatelliteDto) -> Result<Satellite, AppError> {
-        let id = Uuid::new_v4();
-        let now = Utc::now();
-
-        let satellite = Satellite {
-            id,
-            name: dto.name,
-            tle: Tle {
-                line_one: dto.line_one,
-                line_two: dto.line_two,
-            },
-            created_date: now,
-            last_modified_date: now,
-        };
-
-        {
-            let mut store = self
-                .store
-                .write()
-                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-            store.insert(id, satellite.clone());
-        }
-
-        // Invalidate list cache
+        let sat = self.provider.create_satellite(dto).await?;
         self.cache.invalidate("satellites:list").await;
-
-        Ok(satellite)
+        Ok(sat)
     }
 
     pub async fn list_satellites(&self) -> Result<Vec<Satellite>, AppError> {
-        let store = self.store.clone();
-
+        let provider = self.provider.clone();
         self.cache
             .get_or_insert_with("satellites:list", || async move {
-                let guard = store
-                    .read()
-                    .map_err(|e| AppError::InternalServerError(e.to_string()).to_string())?;
-                Ok(guard.values().cloned().collect())
+                provider.list_satellites().await.map_err(|e| e.to_string())
             })
             .await
             .map_err(AppError::InternalServerError)
@@ -82,8 +72,6 @@ impl SatelliteRepository {
             };
 
         let mut all_satellites = self.list_satellites().await?;
-
-        // Sort deterministically by (checkpoint_timestamp, checkpoint_id)
         all_satellites.sort_by(|a, b| {
             a.checkpoint_timestamp()
                 .cmp(&b.checkpoint_timestamp())
@@ -92,7 +80,6 @@ impl SatelliteRepository {
 
         let total_count = all_satellites.len();
 
-        // Apply cursor checkpoint filter
         let filtered: Vec<Satellite> = if let Some(cursor) = cursor_filter {
             all_satellites
                 .into_iter()
@@ -132,21 +119,15 @@ impl SatelliteRepository {
 
     pub async fn get_satellite_by_id(&self, id: Uuid) -> Result<Satellite, AppError> {
         let cache_key = format!("satellite:{}", id);
-        let store = self.store.clone();
+        let provider = self.provider.clone();
 
         self.cache
             .get_or_insert_with(&cache_key, || async move {
-                let guard = store
-                    .read()
-                    .map_err(|e| AppError::InternalServerError(e.to_string()).to_string())?;
-                guard
-                    .get(&id)
-                    .cloned()
-                    .ok_or_else(|| "Satellite not found".to_string())
+                provider.get_satellite(id).await.map_err(|e| e.to_string())
             })
             .await
             .map_err(|e| {
-                if e == "Satellite not found" {
+                if e.contains("NotFound") || e.contains("not found") {
                     AppError::NotFound
                 } else {
                     AppError::InternalServerError(e)
@@ -159,48 +140,25 @@ impl SatelliteRepository {
         id: Uuid,
         dto: UpdateSatelliteDto,
     ) -> Result<Satellite, AppError> {
-        let updated_satellite = {
-            let mut store = self
-                .store
-                .write()
-                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-
-            let satellite = store.get_mut(&id).ok_or(AppError::NotFound)?;
-
-            if let Some(name) = dto.name {
-                satellite.name = name;
-            }
-            if let Some(line_one) = dto.line_one {
-                satellite.tle.line_one = line_one;
-            }
-            if let Some(line_two) = dto.line_two {
-                satellite.tle.line_two = line_two;
-            }
-            satellite.last_modified_date = Utc::now();
-
-            satellite.clone()
-        };
-
-        // Invalidate both L1 and L2 caches for list and single satellite
+        let updated = self.provider.update_satellite(id, dto).await?;
         self.cache.invalidate("satellites:list").await;
         self.cache.invalidate(&format!("satellite:{}", id)).await;
-
-        Ok(updated_satellite)
+        Ok(updated)
     }
 
     pub async fn delete_satellite_by_id(&self, id: Uuid) -> Result<Satellite, AppError> {
-        let removed_satellite = {
-            let mut store = self
-                .store
-                .write()
-                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
-            store.remove(&id).ok_or(AppError::NotFound)?
-        };
-
-        // Invalidate both L1 and L2 caches
+        let sat = self.get_satellite_by_id(id).await?;
+        self.provider.delete_satellite(id).await?;
         self.cache.invalidate("satellites:list").await;
         self.cache.invalidate(&format!("satellite:{}", id)).await;
+        Ok(sat)
+    }
 
-        Ok(removed_satellite)
+    pub async fn list_tle_history(&self, satellite_id: Uuid) -> Result<Vec<Tle>, AppError> {
+        self.provider.list_tle_history(satellite_id).await
+    }
+
+    pub async fn add_tle_history(&self, satellite_id: Uuid, tle: Tle) -> Result<(), AppError> {
+        self.provider.add_tle_history(satellite_id, tle).await
     }
 }
