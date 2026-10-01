@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::models::{
-    GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint, GroundTrackResponse,
-    NextVisiblePassResponse, OverheadResponse, Satellite,
+    GeoJsonFeature, GeoJsonGeometry, GroundTrackPoint, GroundTrackResponse, IlluminationResponse,
+    LightingState, NextVisiblePassResponse, ObserverTwilightState, OverheadResponse, Satellite,
 };
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
@@ -504,5 +504,160 @@ pub fn generate_ground_track(
         geojson,
         footprint_polygon,
         czml,
+    })
+}
+
+/// Computes low-precision Sun ECI position vector [x, y, z] in km
+pub fn calculate_sun_position_eci(time: DateTime<Utc>) -> [f64; 3] {
+    let year = time.year() as f64;
+    let month = time.month() as f64;
+    let day = time.day() as f64;
+    let hour = time.hour() as f64;
+    let minute = time.minute() as f64;
+    let second = time.second() as f64;
+
+    let jd = 367.0 * year - (7.0 * (year + ((month + 9.0) / 12.0).floor())) / 4.0
+        + (275.0 * month) / 9.0
+        + day
+        + 1721013.5
+        + (hour + minute / 60.0 + second / 3600.0) / 24.0;
+
+    let d = jd - 2451545.0;
+
+    let l_deg = (280.460 + 0.9856474 * d) % 360.0;
+    let g_deg = ((357.528 + 0.9856003 * d) % 360.0).to_radians();
+
+    let lambda_deg = l_deg + 1.915 * g_deg.sin() + 0.020 * (2.0 * g_deg).sin();
+    let lambda_rad = lambda_deg.to_radians();
+
+    let eps_deg = 23.439 - 0.0000004 * d;
+    let eps_rad = eps_deg.to_radians();
+
+    let r_au = 1.00014 - 0.01671 * g_deg.cos() - 0.00014 * (2.0 * g_deg).cos();
+    let r_km = r_au * 149_597_870.7;
+
+    let x = r_km * lambda_rad.cos();
+    let y = r_km * eps_rad.cos() * lambda_rad.sin();
+    let z = r_km * eps_rad.sin() * lambda_rad.sin();
+
+    [x, y, z]
+}
+
+/// Computes solar shadow geometry, observer twilight state, and visual magnitude
+pub fn calculate_illumination(
+    satellite: &Satellite,
+    lat: f64,
+    lon: f64,
+    alt: f64,
+    time: DateTime<Utc>,
+) -> Result<IlluminationResponse, AppError> {
+    let line1 = normalize_tle_line(&satellite.tle.line_one, '1');
+    let line2 = normalize_tle_line(&satellite.tle.line_two, '2');
+
+    let elements = Elements::from_tle(
+        Some(satellite.name.clone()),
+        line1.as_bytes(),
+        line2.as_bytes(),
+    )
+    .map_err(|e| AppError::Sgp4Error(format!("Failed to parse TLE: {:?}", e)))?;
+
+    let constants = Constants::from_elements(&elements)
+        .map_err(|e| AppError::Sgp4Error(format!("Constants error: {:?}", e)))?;
+
+    let epoch_dt = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
+    let minutes_since_epoch = (time - epoch_dt).num_milliseconds() as f64 / 60000.0;
+
+    let prediction = constants
+        .propagate(minutes_since_epoch)
+        .map_err(|e| AppError::Sgp4Error(format!("SGP4 propagation error: {:?}", e)))?;
+
+    let sat_eci = prediction.position;
+    let sun_eci = calculate_sun_position_eci(time);
+
+    let re_km = 6378.137;
+    let rs_km = 696_340.0;
+
+    let r_sat_mag =
+        (sat_eci[0] * sat_eci[0] + sat_eci[1] * sat_eci[1] + sat_eci[2] * sat_eci[2]).sqrt();
+    let d_vec = [
+        sun_eci[0] - sat_eci[0],
+        sun_eci[1] - sat_eci[1],
+        sun_eci[2] - sat_eci[2],
+    ];
+    let d_mag = (d_vec[0] * d_vec[0] + d_vec[1] * d_vec[1] + d_vec[2] * d_vec[2]).sqrt();
+
+    let theta_e = (re_km / r_sat_mag).asin();
+    let theta_s = (rs_km / d_mag).asin();
+
+    let dot_prod = (-sat_eci[0] * d_vec[0] - sat_eci[1] * d_vec[1] - sat_eci[2] * d_vec[2])
+        / (r_sat_mag * d_mag);
+    let theta = dot_prod.clamp(-1.0, 1.0).acos();
+
+    let lighting_state = if theta < theta_e - theta_s {
+        LightingState::Umbra
+    } else if (theta_e - theta_s).abs() <= theta && theta < theta_e + theta_s {
+        LightingState::Penumbra
+    } else {
+        LightingState::FullSunlight
+    };
+
+    let gmst = calculate_local_sidereal_time(time, 0.0);
+    let sun_ecf = eci_to_ecf(sun_eci, gmst);
+    let sun_look = ecf_to_look_angles(lat, lon, alt / 1000.0, sun_ecf);
+    let observer_sun_elevation_deg = sun_look.elevation;
+
+    let observer_twilight_state = if observer_sun_elevation_deg > 0.0 {
+        ObserverTwilightState::Daylight
+    } else if observer_sun_elevation_deg >= -6.0 {
+        ObserverTwilightState::CivilTwilight
+    } else if observer_sun_elevation_deg >= -12.0 {
+        ObserverTwilightState::NauticalTwilight
+    } else if observer_sun_elevation_deg >= -18.0 {
+        ObserverTwilightState::AstronomicalTwilight
+    } else {
+        ObserverTwilightState::Night
+    };
+
+    let is_visibly_observable =
+        lighting_state != LightingState::Umbra && observer_sun_elevation_deg <= -6.0;
+
+    let sat_ecf = eci_to_ecf(sat_eci, gmst);
+    let obs_look = ecf_to_look_angles(lat, lon, alt / 1000.0, sat_ecf);
+    let slant_range_km = obs_look.range_km;
+
+    let obs_x_ecf = (re_km + alt / 1000.0) * lat.to_radians().cos() * lon.to_radians().cos();
+    let obs_y_ecf = (re_km + alt / 1000.0) * lat.to_radians().cos() * lon.to_radians().sin();
+    let obs_z_ecf = (re_km + alt / 1000.0) * lat.to_radians().sin();
+    let obs_to_sat = [
+        sat_ecf[0] - obs_x_ecf,
+        sat_ecf[1] - obs_y_ecf,
+        sat_ecf[2] - obs_z_ecf,
+    ];
+
+    let dot_phase =
+        (obs_to_sat[0] * d_vec[0] + obs_to_sat[1] * d_vec[1] + obs_to_sat[2] * d_vec[2])
+            / (slant_range_km * d_mag);
+    let phase_angle_rad = dot_phase.clamp(-1.0, 1.0).acos();
+
+    let phase_fn = (1.0 / std::f64::consts::PI)
+        * (phase_angle_rad.sin()
+            + (std::f64::consts::PI - phase_angle_rad) * phase_angle_rad.cos());
+    let safe_phase_fn = phase_fn.max(0.001);
+
+    let v0 = 3.0;
+    let estimated_visual_magnitude = if lighting_state == LightingState::Umbra {
+        99.0
+    } else {
+        v0 + 5.0 * (slant_range_km / 1000.0).log10() - 2.5 * safe_phase_fn.log10()
+    };
+
+    Ok(IlluminationResponse {
+        satellite_id: satellite.id,
+        satellite_name: satellite.name.clone(),
+        lighting_state,
+        observer_twilight_state,
+        observer_sun_elevation_deg,
+        is_visibly_observable,
+        estimated_visual_magnitude,
     })
 }

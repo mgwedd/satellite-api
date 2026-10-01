@@ -48,6 +48,7 @@ impl Modify for SecurityAddon {
         handlers::satellite_handler::get_overhead,
         handlers::satellite_handler::get_next_visible,
         handlers::satellite_handler::get_ground_track,
+        handlers::satellite_handler::get_satellite_illumination,
     ),
     components(
         schemas(
@@ -65,6 +66,9 @@ impl Modify for SecurityAddon {
             models::GroundTrackPoint,
             models::GeoJsonFeature,
             models::GeoJsonGeometry,
+            models::IlluminationResponse,
+            models::LightingState,
+            models::ObserverTwilightState,
             handlers::satellite_handler::PipelineSyncResponse,
             pagination::PaginationMeta,
             pagination::PaginatedResponseSatellite,
@@ -102,6 +106,10 @@ pub fn create_router(repo: SatelliteRepository) -> Router {
         .route(
             "/satellites/:id/groundtrack",
             get(handlers::get_ground_track),
+        )
+        .route(
+            "/satellites/:id/illumination",
+            get(handlers::get_satellite_illumination),
         )
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
         .with_state(repo);

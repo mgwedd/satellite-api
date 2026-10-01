@@ -7,7 +7,7 @@
       "name": "Michael Wedd"
     },
     "license": {
-      "name": ""
+      "name": "MIT OR Apache-2.0"
     },
     "version": "0.1.0"
   },
@@ -584,6 +584,92 @@
         }
       }
     },
+    "/v1/satellites/{id}/illumination": {
+      "get": {
+        "tags": [
+          "Astrodynamics"
+        ],
+        "summary": "Get Satellite Illumination & Visual Magnitude",
+        "description": "Computes solar shadow geometry (FullSunlight, Penumbra, Umbra), observer twilight state, observable status, and visual magnitude.",
+        "operationId": "getSatelliteIllumination",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Satellite unique UUID identifier",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Observer latitude in decimal degrees (-90.0 to 90.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Observer longitude in decimal degrees (-180.0 to 180.0)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "description": "Observer altitude above sea level in meters (default: 0.0 m)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "nullable": true
+            }
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "description": "UTC timestamp for calculation epoch (defaults to current time if omitted)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Satellite illumination status computed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IlluminationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Satellite not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/satellites/{id}/next-visible": {
       "get": {
         "tags": [
@@ -925,6 +1011,52 @@
           }
         }
       },
+      "IlluminationResponse": {
+        "type": "object",
+        "required": [
+          "satelliteId",
+          "satelliteName",
+          "lightingState",
+          "observerTwilightState",
+          "observerSunElevationDeg",
+          "isVisiblyObservable",
+          "estimatedVisualMagnitude"
+        ],
+        "properties": {
+          "estimatedVisualMagnitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "isVisiblyObservable": {
+            "type": "boolean"
+          },
+          "lightingState": {
+            "$ref": "#/components/schemas/LightingState"
+          },
+          "observerSunElevationDeg": {
+            "type": "number",
+            "format": "double"
+          },
+          "observerTwilightState": {
+            "$ref": "#/components/schemas/ObserverTwilightState"
+          },
+          "satelliteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "satelliteName": {
+            "type": "string"
+          }
+        }
+      },
+      "LightingState": {
+        "type": "string",
+        "enum": [
+          "FullSunlight",
+          "Penumbra",
+          "Umbra"
+        ]
+      },
       "LoginRequest": {
         "type": "object",
         "description": "Request body for JWT authentication login/token generation endpoint.",
@@ -983,6 +1115,16 @@
             "type": "string"
           }
         }
+      },
+      "ObserverTwilightState": {
+        "type": "string",
+        "enum": [
+          "Daylight",
+          "CivilTwilight",
+          "NauticalTwilight",
+          "AstronomicalTwilight",
+          "Night"
+        ]
       },
       "OverheadResponse": {
         "type": "object",

@@ -117,3 +117,31 @@ pub struct GroundTrackResponse {
     pub footprint_polygon: Option<GeoJsonFeature>,
     pub czml: Option<serde_json::Value>,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+pub enum LightingState {
+    FullSunlight,
+    Penumbra,
+    Umbra,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+pub enum ObserverTwilightState {
+    Daylight,
+    CivilTwilight,
+    NauticalTwilight,
+    AstronomicalTwilight,
+    Night,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IlluminationResponse {
+    pub satellite_id: Uuid,
+    pub satellite_name: String,
+    pub lighting_state: LightingState,
+    pub observer_twilight_state: ObserverTwilightState,
+    pub observer_sun_elevation_deg: f64,
+    pub is_visibly_observable: bool,
+    pub estimated_visual_magnitude: f64,
+}
