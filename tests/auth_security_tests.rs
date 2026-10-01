@@ -19,9 +19,13 @@ async fn test_auth_security_rejects_hs256_algorithm_confusion() {
     let now = chrono::Utc::now().timestamp() as usize;
     let claims = Claims {
         sub: "attacker".to_string(),
+        iss: None,
+        aud: None,
         exp: now + 3600,
         iat: now,
         role: "admin".to_string(),
+        roles: Some(vec!["admin".to_string()]),
+        scope: Some("read:satellites write:satellites admin:satellites".to_string()),
     };
 
     // Attacker crafts token using HS256 algorithm with a secret key
@@ -62,9 +66,13 @@ async fn test_auth_security_rejects_expired_and_tampered_rs256_tokens() {
     let now = chrono::Utc::now().timestamp() as usize;
     let expired_claims = Claims {
         sub: "expired_user".to_string(),
+        iss: None,
+        aud: None,
         exp: now - 300, // Expired 5 minutes ago
         iat: now - 3600,
         role: "admin".to_string(),
+        roles: Some(vec!["admin".to_string()]),
+        scope: Some("read:satellites write:satellites admin:satellites".to_string()),
     };
 
     let private_pem = get_rsa_private_key_pem();
@@ -111,15 +119,26 @@ async fn test_auth_security_rejects_expired_and_tampered_rs256_tokens() {
 }
 
 #[tokio::test]
-async fn test_auth_security_rbac_role_enforcement() {
+async fn test_auth_security_viewer_role_permissions() {
     let repo = SatelliteRepository::new(None).await;
     let app = create_router(repo);
 
-    let (op_token, _) = create_jwt_token("operator_user", "operator", 3600).unwrap();
+    let (viewer_token, _) = create_jwt_token("viewer_user", "viewer", 3600).unwrap();
 
-    // 1. Create a satellite as operator -> 201 Created
+    // 1. Viewer can access GET /v1/satellites -> 200 OK
+    let req = Request::builder()
+        .method("GET")
+        .uri("/v1/satellites")
+        .header("authorization", format!("Bearer {}", viewer_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // 2. Viewer attempts POST /v1/satellites -> 403 Forbidden
     let create_payload = json!({
-        "name": "RBAC TEST SAT",
+        "name": "VIEWER SAT",
         "tleLineOne": "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
         "tleLineTwo": "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397"
     });
@@ -128,7 +147,52 @@ async fn test_auth_security_rbac_role_enforcement() {
         .method("POST")
         .uri("/v1/satellites")
         .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", op_token))
+        .header("authorization", format!("Bearer {}", viewer_token))
+        .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "Viewer role must be forbidden from creating satellites"
+    );
+
+    // 3. Viewer attempts POST /v1/pipelines/sync -> 403 Forbidden
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/pipelines/sync?group=stations")
+        .header("authorization", format!("Bearer {}", viewer_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "Viewer role must be forbidden from triggering pipeline sync"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_security_editor_and_admin_role_permissions() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    let (editor_token, _) = create_jwt_token("editor_user", "editor", 3600).unwrap();
+
+    // 1. Create a satellite as Editor -> 201 Created
+    let create_payload = json!({
+        "name": "EDITOR TEST SAT",
+        "tleLineOne": "00694U 63047A   21239.66170074  .00000250  00000-0  20987-4 0  9994",
+        "tleLineTwo": "00694  30.3579   8.5616 0584817  14.9507 346.7615 14.02868132898397"
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/satellites")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", editor_token))
         .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
         .unwrap();
 
@@ -141,11 +205,26 @@ async fn test_auth_security_rbac_role_enforcement() {
     let sat_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let sat_id = sat_json["id"].as_str().unwrap();
 
-    // 2. Operator attempts DELETE /v1/satellites/:id -> Must fail with 403 Forbidden
+    // 2. Update satellite as Editor -> 200 OK
+    let update_payload = json!({
+        "name": "UPDATED BY EDITOR"
+    });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/v1/satellites/{}", sat_id))
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", editor_token))
+        .body(Body::from(serde_json::to_vec(&update_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // 3. Editor attempts DELETE /v1/satellites/:id -> 403 Forbidden
     let req = Request::builder()
         .method("DELETE")
         .uri(format!("/v1/satellites/{}", sat_id))
-        .header("authorization", format!("Bearer {}", op_token))
+        .header("authorization", format!("Bearer {}", editor_token))
         .body(Body::empty())
         .unwrap();
 
@@ -153,10 +232,10 @@ async fn test_auth_security_rbac_role_enforcement() {
     assert_eq!(
         response.status(),
         StatusCode::FORBIDDEN,
-        "Operator role must be forbidden from deleting satellites"
+        "Editor role must be forbidden from deleting satellites"
     );
 
-    // 3. Admin attempts DELETE /v1/satellites/:id -> 204 No Content
+    // 4. Admin attempts DELETE /v1/satellites/:id -> 204 No Content
     let (admin_token, _) = create_jwt_token("admin_user", "admin", 3600).unwrap();
 
     let req = Request::builder()

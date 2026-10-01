@@ -73,6 +73,7 @@ fn test_openapi_schema_static_contract() {
     // 4. Component Schemas & Security Schemes Contract Verification
     let schemas = &v["components"]["schemas"];
     let required_schemas = [
+        "UserRole",
         "Claims",
         "LoginRequest",
         "AuthResponse",

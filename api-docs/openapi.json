@@ -135,7 +135,7 @@
           "Pipelines"
         ],
         "summary": "Trigger CelesTrak Pipeline Sync",
-        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'admin' or 'operator' role).",
+        "description": "Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "triggerPipelineSync",
         "parameters": [
           {
@@ -245,7 +245,7 @@
           "Satellites"
         ],
         "summary": "Create Satellite",
-        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'admin' or 'operator' role).",
+        "description": "Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "createSatellite",
         "requestBody": {
           "content": {
@@ -414,7 +414,7 @@
           "Satellites"
         ],
         "summary": "Update Satellite",
-        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'admin' or 'operator' role).",
+        "description": "Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'editor' or 'admin' role).",
         "operationId": "updateSatellite",
         "parameters": [
           {
@@ -703,7 +703,7 @@
       },
       "Claims": {
         "type": "object",
-        "description": "JWT Claims payload structure containing subject, expiration, issued-at, and role claims.",
+        "description": "JWT Claims payload structure containing standard OIDC and OAuth 2.0 claim fields.",
         "required": [
           "sub",
           "exp",
@@ -711,6 +711,11 @@
           "role"
         ],
         "properties": {
+          "aud": {
+            "type": "string",
+            "description": "Token audience (target API audience)",
+            "nullable": true
+          },
           "exp": {
             "type": "integer",
             "description": "Expiration timestamp in seconds since Unix epoch",
@@ -721,13 +726,31 @@
             "description": "Issued-at timestamp in seconds since Unix epoch",
             "minimum": 0
           },
+          "iss": {
+            "type": "string",
+            "description": "Token issuer (OIDC issuer URI or auth server ID)",
+            "nullable": true
+          },
           "role": {
             "type": "string",
-            "description": "User role (e.g. \"admin\", \"operator\", \"user\")"
+            "description": "User role (\"viewer\", \"editor\", or \"admin\")"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of secondary roles",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Space-separated OAuth 2.0 scopes string (e.g. \"read:satellites write:satellites admin:satellites\")",
+            "nullable": true
           },
           "sub": {
             "type": "string",
-            "description": "Subject (User ID, username, or service ID)"
+            "description": "Subject (User ID, username, or client service ID)"
           }
         }
       },
@@ -911,7 +934,12 @@
         "properties": {
           "role": {
             "type": "string",
-            "description": "Optional user role (\"operator\" or \"admin\", defaults to \"operator\")",
+            "description": "Requested role (\"viewer\", \"editor\", or \"admin\", defaults to \"viewer\")",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional OAuth 2.0 scopes string (e.g. \"read:satellites write:satellites\")",
             "nullable": true
           },
           "username": {
@@ -1098,6 +1126,15 @@
             "nullable": true
           }
         }
+      },
+      "UserRole": {
+        "type": "string",
+        "description": "Modern OAuth 2.0 / OIDC Role Hierarchy for Satellite API RBAC.",
+        "enum": [
+          "viewer",
+          "editor",
+          "admin"
+        ]
       }
     },
     "securitySchemes": {

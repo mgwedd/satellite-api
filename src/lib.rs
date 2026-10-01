@@ -51,6 +51,7 @@ impl Modify for SecurityAddon {
     ),
     components(
         schemas(
+            auth::UserRole,
             auth::Claims,
             auth::LoginRequest,
             auth::AuthResponse,

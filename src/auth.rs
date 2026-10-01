@@ -51,46 +51,96 @@ A87eo7D63iVtKz9V2Tlu2Jvosc/7I6X8NngraI6tRAYTWotZ+JjZWXqJ4fQ6AEG/
 aQIDAQAB
 -----END PUBLIC KEY-----"#;
 
-/// JWT Claims payload structure containing subject, expiration, issued-at, and role claims.
+/// Modern OAuth 2.0 / OIDC Role Hierarchy for Satellite API RBAC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    /// Read-only access to satellite data and astrodynamics calculations.
+    Viewer,
+    /// Read and write access to create/update satellites and trigger sync pipelines.
+    Editor,
+    /// Full administrative access including destructive deletion.
+    Admin,
+}
+
+impl UserRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UserRole::Viewer => "viewer",
+            UserRole::Editor => "editor",
+            UserRole::Admin => "admin",
+        }
+    }
+}
+
+/// JWT Claims payload structure containing standard OIDC and OAuth 2.0 claim fields.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Claims {
-    /// Subject (User ID, username, or service ID)
+    /// Subject (User ID, username, or client service ID)
     pub sub: String,
+    /// Token issuer (OIDC issuer URI or auth server ID)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iss: Option<String>,
+    /// Token audience (target API audience)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aud: Option<String>,
     /// Expiration timestamp in seconds since Unix epoch
     pub exp: usize,
     /// Issued-at timestamp in seconds since Unix epoch
     pub iat: usize,
-    /// User role (e.g. "admin", "operator", "user")
+    /// User role ("viewer", "editor", or "admin")
     pub role: String,
+    /// Optional list of secondary roles
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roles: Option<Vec<String>>,
+    /// Space-separated OAuth 2.0 scopes string (e.g. "read:satellites write:satellites admin:satellites")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 impl Claims {
-    /// Enforces Role-Based Access Control (RBAC). Returns `AppError::Forbidden` if the user's role
-    /// does not match the required role.
-    pub fn require_role(&self, required_role: &str) -> Result<(), AppError> {
-        if self.role.eq_ignore_ascii_case(required_role) {
+    /// Evaluates role hierarchy level (Admin: 3 > Editor/Operator: 2 > Viewer/Reader: 1).
+    pub fn role_level(&self) -> u8 {
+        match self.role.to_lowercase().as_str() {
+            "admin" | "superuser" => 3,
+            "editor" | "operator" | "writer" => 2,
+            "viewer" | "reader" | "user" => 1,
+            _ => 0,
+        }
+    }
+
+    /// Checks whether caller has at least the minimum required role in the hierarchy.
+    pub fn has_role(&self, minimum_role: UserRole) -> bool {
+        let req_level = match minimum_role {
+            UserRole::Admin => 3,
+            UserRole::Editor => 2,
+            UserRole::Viewer => 1,
+        };
+        self.role_level() >= req_level
+    }
+
+    /// Enforces minimum role requirement. Returns `AppError::Forbidden` if caller has insufficient privileges.
+    pub fn require_role(&self, minimum_role: UserRole) -> Result<(), AppError> {
+        if self.has_role(minimum_role) {
             Ok(())
         } else {
             Err(AppError::Forbidden(format!(
-                "Role '{}' is required for this action (caller has '{}')",
-                required_role, self.role
+                "Action requires '{:?}' role or higher (caller has '{}')",
+                minimum_role, self.role
             )))
         }
     }
 
-    /// Enforces Role-Based Access Control (RBAC) against an allowed list of roles.
-    pub fn require_any_role(&self, allowed_roles: &[&str]) -> Result<(), AppError> {
-        let has_allowed_role = allowed_roles
-            .iter()
-            .any(|r| self.role.eq_ignore_ascii_case(r));
-        if has_allowed_role {
-            Ok(())
+    /// Checks if token contains a specific OAuth 2.0 scope.
+    pub fn has_scope(&self, required_scope: &str) -> bool {
+        if self.role_level() >= 3 {
+            return true; // Admin bypasses scope check
+        }
+        if let Some(ref scope_str) = self.scope {
+            scope_str.split_whitespace().any(|s| s == required_scope)
         } else {
-            Err(AppError::Forbidden(format!(
-                "One of roles {:?} is required for this action (caller has '{}')",
-                allowed_roles, self.role
-            )))
+            false
         }
     }
 }
@@ -101,8 +151,10 @@ impl Claims {
 pub struct LoginRequest {
     /// Username or service subject identifier
     pub username: String,
-    /// Optional user role ("operator" or "admin", defaults to "operator")
+    /// Requested role ("viewer", "editor", or "admin", defaults to "viewer")
     pub role: Option<String>,
+    /// Optional OAuth 2.0 scopes string (e.g. "read:satellites write:satellites")
+    pub scope: Option<String>,
 }
 
 /// Response returned upon successful RS256 JWT token generation.
@@ -165,10 +217,13 @@ pub fn get_rsa_public_key_pem() -> String {
     DEV_RSA_PUBLIC_KEY_PEM.to_string()
 }
 
-/// Generates a strictly RS256-signed JWT token string and Claims struct.
-pub fn create_jwt_token(
+/// Generates a strictly RS256-signed JWT token string and Claims struct with full OIDC/OAuth2 metadata.
+pub fn create_jwt_token_full(
     sub: &str,
     role: &str,
+    iss: Option<String>,
+    aud: Option<String>,
+    scope: Option<String>,
     ttl_seconds: u64,
 ) -> Result<(String, Claims), AppError> {
     let sub_clean = sub.trim();
@@ -185,9 +240,13 @@ pub fn create_jwt_token(
     let exp = now + ttl_seconds as usize;
     let claims = Claims {
         sub: sub_clean.to_string(),
+        iss,
+        aud,
         exp,
         iat: now,
         role: role_clean.to_string(),
+        roles: Some(vec![role_clean.to_string()]),
+        scope,
     };
 
     let private_pem = get_rsa_private_key_pem();
@@ -202,6 +261,27 @@ pub fn create_jwt_token(
     Ok((token, claims))
 }
 
+/// Generates a strictly RS256-signed JWT token string and Claims struct with default scopes.
+pub fn create_jwt_token(
+    sub: &str,
+    role: &str,
+    ttl_seconds: u64,
+) -> Result<(String, Claims), AppError> {
+    let default_scope = match role.to_lowercase().as_str() {
+        "admin" | "superuser" => "read:satellites write:satellites admin:satellites",
+        "editor" | "operator" | "writer" => "read:satellites write:satellites",
+        _ => "read:satellites",
+    };
+    create_jwt_token_full(
+        sub,
+        role,
+        Some("satellite-api".to_string()),
+        Some("satellite-api".to_string()),
+        Some(default_scope.to_string()),
+        ttl_seconds,
+    )
+}
+
 /// Decodes and strictly verifies the RS256 signature and expiration of a JWT token string.
 /// Strictly rejects non-RS256 algorithms (e.g. HS256, HS384, alg=none) to prevent algorithm confusion attacks.
 pub fn decode_jwt_token(token: &str) -> Result<Claims, AppError> {
@@ -211,6 +291,7 @@ pub fn decode_jwt_token(token: &str) -> Result<Claims, AppError> {
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.validate_exp = true;
+    validation.validate_aud = false;
 
     let token_data = decode::<Claims>(token, &decoding_key, &validation).map_err(|e| {
         AppError::Unauthorized(format!("Invalid or expired RS256 JWT token: {}", e))
@@ -280,16 +361,31 @@ pub async fn login_handler(
         .as_deref()
         .map(str::trim)
         .filter(|r| !r.is_empty())
-        .unwrap_or("operator");
+        .unwrap_or("viewer");
 
-    // Restrict public unauthenticated login handler to standard non-escalated roles
     let sanitized_role = match role.to_lowercase().as_str() {
         "admin" => "admin",
-        _ => "operator",
+        "editor" | "operator" => "editor",
+        _ => "viewer",
     };
 
+    let default_scope = match sanitized_role {
+        "admin" => "read:satellites write:satellites admin:satellites",
+        "editor" => "read:satellites write:satellites",
+        _ => "read:satellites",
+    };
+
+    let scope = payload.scope.unwrap_or_else(|| default_scope.to_string());
+
     let ttl_seconds = 86400; // 24 hours
-    let (token, claims) = create_jwt_token(username, sanitized_role, ttl_seconds)?;
+    let (token, claims) = create_jwt_token_full(
+        username,
+        sanitized_role,
+        Some("satellite-api".to_string()),
+        Some("satellite-api".to_string()),
+        Some(scope),
+        ttl_seconds,
+    )?;
 
     Ok(Json(AuthResponse {
         token,
@@ -320,9 +416,13 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
         let claims = Claims {
             sub: "attacker".into(),
+            iss: None,
+            aud: None,
             exp: now + 3600,
             iat: now,
             role: "admin".into(),
+            roles: Some(vec!["admin".into()]),
+            scope: Some("read:satellites write:satellites admin:satellites".into()),
         };
 
         // Attempt to encode using HMAC-SHA256 (HS256) instead of RS256
@@ -347,9 +447,13 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
         let claims = Claims {
             sub: "test_user".into(),
+            iss: None,
+            aud: None,
             exp: now - 100, // Expired 100s ago
             iat: now - 200,
             role: "admin".into(),
+            roles: Some(vec!["admin".into()]),
+            scope: Some("read:satellites write:satellites admin:satellites".into()),
         };
 
         let private_pem = get_rsa_private_key_pem();
@@ -364,24 +468,42 @@ mod tests {
     fn test_rbac_role_requirements() {
         let admin_claims = Claims {
             sub: "admin_user".into(),
+            iss: None,
+            aud: None,
             exp: 9999999999,
             iat: 1000000000,
             role: "admin".into(),
+            roles: Some(vec!["admin".into()]),
+            scope: Some("read:satellites write:satellites admin:satellites".into()),
         };
-        assert!(admin_claims.require_role("admin").is_ok());
-        assert!(admin_claims
-            .require_any_role(&["admin", "operator"])
-            .is_ok());
+        assert!(admin_claims.require_role(UserRole::Admin).is_ok());
+        assert!(admin_claims.require_role(UserRole::Editor).is_ok());
 
         let operator_claims = Claims {
             sub: "op_user".into(),
+            iss: None,
+            aud: None,
             exp: 9999999999,
             iat: 1000000000,
             role: "operator".into(),
+            roles: Some(vec!["operator".into()]),
+            scope: Some("read:satellites write:satellites".into()),
         };
-        assert!(operator_claims.require_role("admin").is_err());
-        assert!(operator_claims
-            .require_any_role(&["admin", "operator"])
-            .is_ok());
+        assert!(operator_claims.require_role(UserRole::Admin).is_err());
+        assert!(operator_claims.require_role(UserRole::Editor).is_ok());
+
+        let viewer_claims = Claims {
+            sub: "viewer_user".into(),
+            iss: None,
+            aud: None,
+            exp: 9999999999,
+            iat: 1000000000,
+            role: "viewer".into(),
+            roles: Some(vec!["viewer".into()]),
+            scope: Some("read:satellites".into()),
+        };
+        assert!(viewer_claims.require_role(UserRole::Viewer).is_ok());
+        assert!(viewer_claims.require_role(UserRole::Editor).is_err());
+        assert!(viewer_claims.require_role(UserRole::Admin).is_err());
     }
 }

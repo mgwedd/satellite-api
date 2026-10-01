@@ -1,4 +1,4 @@
-use crate::auth::Claims;
+use crate::auth::{Claims, UserRole};
 use crate::error::AppError;
 use crate::models::{
     CreateSatelliteDto, GroundTrackResponse, NextVisiblePassResponse, OverheadResponse, Satellite,
@@ -70,7 +70,7 @@ pub struct PipelineSyncResponse {
 
 /// Create Satellite
 ///
-/// Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'admin' or 'operator' role).
+/// Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     post,
     path = "/v1/satellites",
@@ -90,7 +90,7 @@ pub async fn create_satellite(
     State(repo): State<SatelliteRepository>,
     Json(dto): Json<CreateSatelliteDto>,
 ) -> Result<(StatusCode, Json<Satellite>), AppError> {
-    claims.require_any_role(&["admin", "operator"])?;
+    claims.require_role(UserRole::Editor)?;
     tracing::info!("Satellite creation requested by JWT user: {}", claims.sub);
     let satellite = repo.create_satellite(dto).await?;
     Ok((StatusCode::CREATED, Json(satellite)))
@@ -143,7 +143,7 @@ pub async fn get_satellite(
 
 /// Update Satellite
 ///
-/// Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'admin' or 'operator' role).
+/// Updates a satellite's name or TLE orbital parameters. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     patch,
     path = "/v1/satellites/{id}",
@@ -167,7 +167,7 @@ pub async fn update_satellite(
     Path(id): Path<Uuid>,
     Json(dto): Json<UpdateSatelliteDto>,
 ) -> Result<Json<Satellite>, AppError> {
-    claims.require_any_role(&["admin", "operator"])?;
+    claims.require_role(UserRole::Editor)?;
     tracing::info!("Satellite update requested by JWT user: {}", claims.sub);
     let satellite = repo.update_satellite_by_id(id, dto).await?;
     Ok(Json(satellite))
@@ -197,7 +197,7 @@ pub async fn delete_satellite(
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    claims.require_role("admin")?;
+    claims.require_role(UserRole::Admin)?;
     tracing::info!("Satellite deletion requested by JWT admin: {}", claims.sub);
     repo.delete_satellite_by_id(id).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -205,7 +205,7 @@ pub async fn delete_satellite(
 
 /// Trigger CelesTrak Pipeline Sync
 ///
-/// Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'admin' or 'operator' role).
+/// Triggers automated CelesTrak discovery pipeline synchronization for a specific satellite group. Protected by JWT auth (requires 'editor' or 'admin' role).
 #[utoipa::path(
     post,
     path = "/v1/pipelines/sync",
@@ -225,7 +225,7 @@ pub async fn trigger_pipeline_sync(
     State(repo): State<SatelliteRepository>,
     Query(params): Query<PipelineSyncQueryParams>,
 ) -> Result<Json<PipelineSyncResponse>, AppError> {
-    claims.require_any_role(&["admin", "operator"])?;
+    claims.require_role(UserRole::Editor)?;
     tracing::info!("Pipeline sync triggered by JWT user: {}", claims.sub);
 
     let group = match params.group.as_deref() {
