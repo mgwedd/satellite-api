@@ -9,9 +9,6 @@ TAG="${1:-astrea-sda-api:latest}"
 echo "=========================================================="
 echo "🐳 Building Production Multi-Stage Docker Container: $TAG"
 echo "=========================================================="
-echo "ℹ️ Note: Automated test verification executes inside build container."
-echo "ℹ️ Production container contains NO local dev keys, debug code, or test files."
-echo ""
 
 docker build -t "$TAG" -f Dockerfile .
 
