@@ -10,6 +10,9 @@ PUB_KEY="$KEYS_DIR/rsa_public.pem"
 
 mkdir -p "$KEYS_DIR"
 
+# Clean up legacy Nginx self-signed certificate files if present
+rm -f "$KEYS_DIR/dev-tls.crt" "$KEYS_DIR/dev-tls.key"
+
 # Initialize .env from template if missing
 if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
   cp "$DIR/.env.example" "$DIR/.env"

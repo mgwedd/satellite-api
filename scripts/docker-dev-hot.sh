@@ -8,7 +8,7 @@ echo "=========================================================="
 echo "🔥 Starting Local Host Hot-Reload Stack (dev-hot)..."
 echo "=========================================================="
 
-# Ensure local RSA keypair and TLS certificates exist
+# Ensure local RSA keypair exists
 ./scripts/setup-keys.sh
 
 echo ""

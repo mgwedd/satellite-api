@@ -50,7 +50,7 @@ install: ## Install compiled binary locally into ~/.cargo/bin
 	cargo install --path .
 	@echo "✅ Installed astrea-sda-api binary into ~/.cargo/bin/astrea-sda-api"
 
-install-dev: keys hooks install ## Full developer onboarding (keys, TLS certs, hooks, cargo-watch, fern, binary)
+install-dev: keys hooks install ## Full developer onboarding (keys, hooks, cargo-watch, fern, binary)
 	@echo "=========================================================="
 	@echo "🛠️ Installing Local Developer Tooling & Dependencies..."
 	@echo "=========================================================="
@@ -68,7 +68,7 @@ install-dev: keys hooks install ## Full developer onboarding (keys, TLS certs, h
 	@echo "✅ Developer environment fully initialized!"
 	@echo "=========================================================="
 
-keys: ## Auto-generate local RSA 2048 keypair & dev TLS certificates in .keys/
+keys: ## Auto-generate local RSA 2048 keypair in .keys/ (TLS managed by Caddy)
 	@./scripts/setup-keys.sh
 
 hooks: ## Install Rust git pre-commit quality hooks via cargo-husky
