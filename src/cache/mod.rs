@@ -1,3 +1,10 @@
+//! Tiered Cache Abstraction Layer (L1 Memory + L2 External Cache)
+//!
+//! Separates generic cache drivers from cloud-specific providers:
+//! - **L1 Memory**: Moka in-memory cache
+//! - **Generic L2 Driver**: `redis-rs` protocol client for Redis
+//! - **Cloud L2 Provider**: Upstash TLS (`rediss://`) Redis connection
+
 use moka::future::Cache as MokaCache;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
