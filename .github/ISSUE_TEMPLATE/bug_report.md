@@ -21,7 +21,7 @@ A clear description of what you expected to happen.
 ## 💻 Environment & Log Output
 - **OS**: [e.g. macOS 14.0, Ubuntu 22.04]
 - **Astrea SDA API Version / Git Commit**: [e.g. v0.1.0 or commit hash]
-- **Execution Mode**: [e.g. Docker Nginx Gateway, Host Hot-Reload, Native Cargo]
+- **Execution Mode**: [e.g. Docker Caddy Gateway, Host Hot-Reload, Native Cargo]
 
 ```bash
 # Paste error logs or cURL outputs here

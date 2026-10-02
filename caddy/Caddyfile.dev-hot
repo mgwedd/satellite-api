@@ -1,0 +1,33 @@
+{
+    admin off
+}
+
+# Host Hot-Reload HTTPS Gateway: https://sda.localtest.me:8443, https://localhost:8443
+:8443 {
+    tls internal
+
+    # Subpath prefix alias: /sda/api/... -> /v1/...
+    handle_path /sda/api/* {
+        reverse_proxy host.docker.internal:8080
+    }
+
+    # Pass-through RFC 8705 mTLS Certificate Fingerprint Headers (if provided by client)
+    reverse_proxy host.docker.internal:8080 {
+        header_up X-Client-Cert-Fingerprint {http.request.header.X-Client-Cert-Fingerprint}
+        header_up X-Client-Cert-Hash {http.request.header.X-Client-Cert-Hash}
+    }
+}
+
+# Host Hot-Reload HTTP Gateway: http://sda.localtest.me:8888, http://localhost:8888
+:8888 {
+    # Subpath prefix alias: /sda/api/... -> /v1/...
+    handle_path /sda/api/* {
+        reverse_proxy host.docker.internal:8080
+    }
+
+    # Pass-through RFC 8705 mTLS Certificate Fingerprint Headers (if provided by client)
+    reverse_proxy host.docker.internal:8080 {
+        header_up X-Client-Cert-Fingerprint {http.request.header.X-Client-Cert-Fingerprint}
+        header_up X-Client-Cert-Hash {http.request.header.X-Client-Cert-Hash}
+    }
+}

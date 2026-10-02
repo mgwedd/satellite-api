@@ -77,28 +77,44 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ### Running with Docker & Build Targets (`Makefile`)
 
-Astrea SDA API provides 3 simple build commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
+Astrea SDA API provides a 100% open-source, zero-account, zero-configuration local gateway powered by **Caddy** (Apache 2.0). See **[DOCKER.md](DOCKER.md)** for detailed architecture.
 
-#### 1. Local Host Hot-Reload (`make build dev-hot`)
-Docker DNS/Nginx/Postgres/Redis stack routing custom domain requests (`https://astrealabs.local.com/sda/api/v1`) directly to your locally running host `cargo-watch` process for instant code reloads:
+#### 1. Local Host Hot-Reload (`make dev-hot`)
+PostgreSQL + Redis + Caddy stack with instant sub-second hot-reload via host `cargo-watch`:
+- ⚡ **HTTPS (Automatic TLS)**: `https://sda.localtest.me:8443` (or `https://localhost:8443`)
+  - Swagger UI : `https://sda.localtest.me:8443/` (or `/swagger-ui/`)
+  - ReDoc Docs : `https://sda.localtest.me:8443/docs`
+  - Direct API : `https://sda.localtest.me:8443/v1/...` (or `/api/v1/...`)
+- 🌐 **HTTP Fallback**: `http://sda.localtest.me:8888` (or `http://localhost:8888`)
+- *(Zero accounts, zero signups, zero `/etc/hosts` editing needed)*
 
 ```bash
-make build dev-hot
+make dev-hot
 ```
 
-#### 2. Containerized Local Dev (`make build dev`)
-Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts:
+#### 2. Containerized Local Dev (`make dev`)
+Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts and Caddy:
 
 ```bash
-make build dev
+make dev
 ```
 
-#### 3. Production Deployable Image (`make build prod`)
+#### 3. Local Production Multi-Container Stack (`make prod-run`)
+Runs the compiled production container image locally with PostgreSQL, Redis, and Caddy:
+
+```bash
+make prod-run
+```
+
+#### 4. Production Container Image Build (`make prod`)
 Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
 
 ```bash
-make build prod
+make prod
 ```
+
+
+
 
 ---
 
@@ -116,6 +132,8 @@ Set environment variables to customize runtime behavior:
 | `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
+
+
 
 
 
@@ -169,29 +187,29 @@ open api-docs/index.html
 
 ### 1. List Satellites (Paginated)
 ```bash
-curl -s "https://astrealabs.local.com/sda/api/v1/satellites?limit=5" | jq
+curl -s "https://sda.localtest.me:8443/v1/satellites?limit=5" | jq
 ```
 
 ### 2. Generate 3D Ground Track & GeoJSON Trajectory
 ```bash
-curl -s "https://astrealabs.local.com/sda/api/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
 ```
 
 ### 3. Find Overhead Satellites for Observer Location
 Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
 ```bash
-curl -s "https://astrealabs.local.com/sda/api/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
 ### 4. Compute Next Visible Pass for Satellite
 ```bash
-curl -s "https://astrealabs.local.com/sda/api/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
+curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```
 
 ### 5. Trigger Manual CelesTrak Sync
 Sync space station TLE data:
 ```bash
-curl -X POST "https://astrealabs.local.com/sda/api/v1/pipelines/sync?group=stations" | jq
+curl -X POST "https://sda.localtest.me:8443/v1/pipelines/sync?group=stations" | jq
 ```
 
 ---
@@ -222,7 +240,7 @@ SDK clients authenticate dynamically via `/v1/auth/login` or `/v1/auth/signup` t
 For automated background services, microservices, and satellite ingest pipelines, Astrea SDA API supports RFC 7523 Machine-to-Machine authentication. Services sign a client assertion payload with their private RSA key and exchange it for a scoped Bearer token without transmitting static shared secrets:
 
 ```bash
-curl -X POST "https://astrealabs.local.com/sda/api/v1/auth/token" \
+curl -X POST "https://sda.localtest.me:8443/v1/auth/token" \
   -H "Content-Type: application/json" \
   -d '{
     "grantType": "client_credentials",
@@ -251,7 +269,7 @@ In production applications, client applications authenticate dynamically at star
 import { AstreaSdaApiClient } from "./sdks/typescript";
 
 // 1. Authenticate at application startup via Auth Provider
-const authResponse = await fetch("https://astrealabs.local.com/sda/api/v1/auth/login", {
+const authResponse = await fetch("https://sda.localtest.me:8443/v1/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ email: "operator@example.com", password: process.env.OPERATOR_PASSWORD })
@@ -260,7 +278,7 @@ const authResponse = await fetch("https://astrealabs.local.com/sda/api/v1/auth/l
 // 2. Initialize SDK client with the dynamically acquired JWT Bearer token (or M2M assertion token)
 const client = new AstreaSdaApiClient({
   token: authResponse.token,
-  environment: "https://astrealabs.local.com/sda/api"
+  environment: "https://sda.localtest.me:8443"
 });
 
 // 3. Execute authenticated operations
@@ -279,14 +297,14 @@ from sdks.python import AstreaSdaApiClient
 
 # 1. Authenticate at application startup via Auth Provider
 auth_response = requests.post(
-    "https://astrealabs.local.com/sda/api/v1/auth/login",
+    "https://sda.localtest.me:8443/v1/auth/login",
     json={"email": "operator@example.com", "password": os.environ["OPERATOR_PASSWORD"]}
 ).json()
 
 # 2. Initialize SDK client with the dynamically acquired JWT Bearer token
 client = AstreaSdaApiClient(
     token=auth_response["token"],
-    base_url="https://astrealabs.local.com/sda/api"
+    base_url="https://sda.localtest.me:8443"
 )
 
 # 3. Execute authenticated operations
@@ -315,7 +333,7 @@ func main() {
         "email":    "operator@example.com",
         "password": os.Getenv("OPERATOR_PASSWORD"),
     })
-    resp, _ := http.Post("https://astrealabs.local.com/sda/api/v1/auth/login", "application/json", bytes.NewBuffer(payload))
+    resp, _ := http.Post("https://sda.localtest.me:8443/v1/auth/login", "application/json", bytes.NewBuffer(payload))
     var authResp struct {
         Token string `json:"token"`
     }
@@ -324,7 +342,7 @@ func main() {
     // 2. Initialize SDK client with dynamically acquired JWT token
     sdk := client.NewClient(
         client.WithToken(authResp.Token),
-        client.WithBaseURL("https://astrealabs.local.com/sda/api"),
+        client.WithBaseURL("https://sda.localtest.me:8443"),
     )
 }
 ```
@@ -336,7 +354,7 @@ use astrea_sda_api_sdk::AstreaSdaApiClient;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AstreaSdaApiClient::builder()
-        .base_url("https://astrealabs.local.com/sda/api")
+        .base_url("https://sda.localtest.me:8443")
         .bearer_token(std::env::var("ASTREA_BEARER_TOKEN")?)
         .build()?;
     Ok(())

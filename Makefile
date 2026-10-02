@@ -7,7 +7,7 @@ ROLE ?= admin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
+.PHONY: help build dev-hot dev prod prod-run prod-up check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod urls
 
 help: ## Display this self-documenting developer help menu
 	@echo "=============================================================================="
@@ -23,11 +23,16 @@ build: ## Build production container image (alias for make prod)
 		./scripts/docker-build.sh; \
 	fi
 
-dev-hot: ## Run host app + Docker DNS stack (Postgres + Redis + Nginx) with sub-second hot-reload
+dev-hot: ## Run host app + Docker dev stack (Postgres + Redis + Caddy) with sub-second hot-reload
 	@./scripts/docker-dev-hot.sh
 
-dev: ## Run fully containerized local dev stack (cargo-watch running inside Docker)
+dev: ## Run containerized local dev stack (cargo-watch + Postgres + Redis + Caddy)
 	@./scripts/docker-dev.sh
+
+prod-run: ## Run production multi-container stack locally (api + Postgres + Redis + Caddy)
+	@./scripts/docker-prod.sh
+
+prod-up: prod-run ## Alias for make prod-run
 
 prod: ## Build optimized production container image with build verification tests
 	@./scripts/docker-build.sh
@@ -36,6 +41,8 @@ build-dev-hot: dev-hot
 build-dev: dev
 build-prod: prod
 
+
+
 ##@ Installation & Setup
 
 install: ## Install compiled binary locally into ~/.cargo/bin
@@ -43,7 +50,7 @@ install: ## Install compiled binary locally into ~/.cargo/bin
 	cargo install --path .
 	@echo "✅ Installed astrea-sda-api binary into ~/.cargo/bin/astrea-sda-api"
 
-install-dev: keys hooks install ## Full developer onboarding (keys, TLS certs, hooks, cargo-watch, fern, binary)
+install-dev: keys hooks install ## Full developer onboarding (keys, hooks, cargo-watch, fern, binary)
 	@echo "=========================================================="
 	@echo "🛠️ Installing Local Developer Tooling & Dependencies..."
 	@echo "=========================================================="
@@ -61,7 +68,7 @@ install-dev: keys hooks install ## Full developer onboarding (keys, TLS certs, h
 	@echo "✅ Developer environment fully initialized!"
 	@echo "=========================================================="
 
-keys: ## Auto-generate local RSA 2048 keypair & dev TLS certificates in .keys/
+keys: ## Auto-generate local RSA 2048 keypair in .keys/ (TLS managed by Caddy)
 	@./scripts/setup-keys.sh
 
 hooks: ## Install Rust git pre-commit quality hooks via cargo-husky
@@ -143,10 +150,22 @@ sdk-rust: ## Generate Rust SDK
 		npx fern generate --group rust; \
 	fi
 
-##@ Docker Operations & Housekeeping
-
+##@ Docker Operations & Gateway
 logs: ## Stream Docker container logs
 	docker compose logs -f
+
+urls: ## Print all accessible Caddy HTTPS and HTTP URLs
+	@echo "=========================================================="
+	@echo "⚡ Astrea SDA API - Caddy Gateway Endpoints"
+	@echo "=========================================================="
+	@echo "   - HTTPS (Automatic TLS) : https://sda.localtest.me:8443 (or https://localhost:8443)"
+	@echo "   - Interactive Swagger UI: https://sda.localtest.me:8443/ (or /swagger-ui/)"
+	@echo "   - ReDoc Interactive Docs: https://sda.localtest.me:8443/docs"
+	@echo "   - Direct API Endpoints  : https://sda.localtest.me:8443/v1/... (or /api/v1/...)"
+	@echo "   - HTTP Local Gateway    : http://sda.localtest.me:8888 (or http://localhost:8888)"
+	@echo "   - Direct Container Port : http://localhost:8880"
+	@echo "   (Zero accounts, zero signups, zero /etc/hosts edits required)"
+	@echo "=========================================================="
 
 stop: ## Stop all running Docker containers across environments
 	-docker compose down
@@ -155,3 +174,5 @@ stop: ## Stop all running Docker containers across environments
 
 clean: stop ## Stop Docker containers and clean target build directory
 	cargo clean
+
+

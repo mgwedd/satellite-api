@@ -212,3 +212,35 @@ async fn test_openapi_and_swagger_ui_endpoints() {
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     assert!(body_str.contains("redoc"));
 }
+
+#[tokio::test]
+async fn test_api_v1_route_alias() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    // Verify /api/v1/auth/login route alias
+    let login_payload = json!({
+        "email": "admin@astrea.local",
+        "password": "password123"
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/login")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify /api/v1/satellites route alias
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/satellites")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
