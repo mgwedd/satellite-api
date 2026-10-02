@@ -12,10 +12,23 @@ TLS_CRT="$KEYS_DIR/dev-tls.crt"
 
 mkdir -p "$KEYS_DIR"
 
+check_tailscale_auth() {
+  if [ -n "$TS_AUTHKEY" ]; then
+    echo "🌐 Tailscale: Auth key detected in environment"
+  elif [ -f "$DIR/.env" ] && grep -q '^TS_AUTHKEY=' "$DIR/.env"; then
+    echo "🌐 Tailscale: Auth key configured in .env"
+  else
+    echo "🌐 Tailscale: TS_AUTHKEY not set. Set TS_AUTHKEY in .env for zero-config Tailscale HTTPS (https://sda/)."
+    echo "   (Get a free key at https://login.tailscale.com/admin/settings/keys or sign in interactively)"
+  fi
+}
+
 if [[ -f "$PRIV_KEY" && -f "$PUB_KEY" && -f "$TLS_KEY" && -f "$TLS_CRT" && "$1" != "--force" ]]; then
   echo "🔑 Local RSA keypair & TLS certificates already exist in .keys/"
+  check_tailscale_auth
   exit 0
 fi
+
 
 echo "=========================================================="
 echo "🔑 Generating custom local 2048-bit RSA keypair & TLS certs..."
@@ -62,4 +75,6 @@ echo "   RSA Private Key : $PRIV_KEY"
 echo "   RSA Public Key  : $PUB_KEY"
 echo "   TLS Certificate : $TLS_CRT"
 echo "   TLS Key         : $TLS_KEY"
+check_tailscale_auth
 echo "=========================================================="
+

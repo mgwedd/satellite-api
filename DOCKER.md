@@ -6,20 +6,25 @@ Astrea SDA API provides enterprise-grade containerization with clear separation 
 
 ## 🏗️ Architecture Overview
 
-The multi-container stack uses **Docker DNS Resolution** and an internal bridge network (`astrea-net`). **No `localhost` hardcoding is used in service-to-service communications.**
+The multi-container stack uses **Docker DNS Resolution** and an internal bridge network (`astrea-dev-net`). **No `localhost` hardcoding is used in service-to-service communications.**
 
 ```
                                   ┌─────────────────────────────┐
                                   │      Client / Browser       │
                                   └──────────────┬──────────────┘
-                                                 │ Port 80
-                                                 ▼
-                                  ┌─────────────────────────────┐
-                                  │        Nginx Gateway        │
-                                  │       (nginx:alpine)        │
-                                  └──────────────┬──────────────┘
-                                                 │ Docker DNS: api:8080
-                                                 ▼
+                                                 │
+                    ┌────────────────────────────┴────────────────────────────┐
+                    │                                                         │
+                    ▼ (Main Gateway: Automatic TLS, MagicDNS)                 ▼ (DIY / Local Proxy)
+     ┌─────────────────────────────┐                           ┌─────────────────────────────┐
+     │    Tailscale OSS Gateway    │                           │        Nginx Gateway        │
+     │ (tailscale/tailscale:stable)│                           │       (nginx:alpine)        │
+     │      https://sda/           │                           │    https://localhost:8443   │
+     └──────────────┬──────────────┘                           └──────────────┬──────────────┘
+                    │                                                         │
+                    └────────────────────────────┬────────────────────────────┘
+                                                 │
+                                                 ▼ Docker DNS: api-dev:8080 (or host.docker.internal:8080)
                                   ┌─────────────────────────────┐
                                   │       Astrea SDA API        │
                                   │      (rust:1.80-alpine)     │
@@ -40,49 +45,58 @@ The multi-container stack uses **Docker DNS Resolution** and an internal bridge 
 Astrea SDA API provides 3 simple build commands depending on your workflow:
 
 ```bash
-# 1. Local host hot-reload (Docker DNS + Postgres + Redis + Nginx routing to host cargo-watch instance)
-make build dev-hot
+# 1. Local host hot-reload (Postgres + Redis + Tailscale + Nginx routing to host cargo-watch instance)
+make dev-hot
 
-# 2. Fully containerized local dev stack (cargo-watch running inside Docker)
-make build dev
+# 2. Fully containerized local dev stack (cargo-watch running inside Docker with Tailscale)
+make dev
 
 # 3. Optimized production deployable container image
-make build prod
+make prod
 ```
 
 ---
 
-### Option 1: Local Host Hot-Reload (`make build dev-hot`)
+### Option 1: Local Host Hot-Reload (`make dev-hot`)
 
-Spins up PostgreSQL, Redis, and Nginx in Docker while running your Rust application locally on your host machine via `cargo-watch`. Nginx uses Docker DNS (`host.docker.internal`) to proxy custom domain requests directly to your host process for sub-second hot reloading without container compilation delays:
+Spins up PostgreSQL, Redis, Tailscale OSS gateway, and Nginx in Docker while running your Rust application locally on your host machine via `cargo-watch`. Tailscale uses `serve-hot.json` via Docker DNS (`host.docker.internal`) to proxy requests directly to your host process for sub-second hot reloading without container compilation delays:
 
 ```bash
-make build dev-hot
+make dev-hot
 ```
 
-- **HTTPS Custom Domain Gateway**: `https://astrealabs.local.com/sda/api/v1` (or `https://localhost:8443/sda/api/v1`)
-- **HTTP Gateway**: `http://localhost:8888`
-- **PostgreSQL**: `localhost:5432`
-- **Redis**: `localhost:6379`
+- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Automatic TLS)**:
+  - **Interactive Swagger UI**: `https://sda/`
+  - **ReDoc API Reference**: `https://sda/docs`
+  - **API Endpoints**: `https://sda/v1/...` or `https://sda/api/v1/...`
+  - **Team / Custom Domain Alias**: `https://sda.dev.astrealabs.com/api/v1/...`
+- 🛠️ **DIY Nginx Gateway (Local Only)**:
+  - **HTTPS**: `https://localhost:8443/sda/api/v1`
+  - **HTTP**: `http://localhost:8888`
+- 🗄️ **PostgreSQL**: `localhost:5432`
+- 💾 **Redis**: `localhost:6379`
 
-> 💡 **Custom Local Domain Setup (`astrealabs.local.com`)**:
-> Add `127.0.0.1 astrealabs.local.com` to your `/etc/hosts` file. Nginx terminates TLS using the auto-generated certificate in `.keys/dev-tls.crt` and forwards `/sda/api/v1` to your locally running host process.
+> 💡 **Why Tailscale OSS Gateway?**:
+> Tailscale gives you **real Let's Encrypt TLS certificates** and **instant MagicDNS resolution** (`https://sda/`). No self-signed certificate warnings, no `-k` / `--insecure` in `curl`, and **no `/etc/hosts` editing**. Teammates on your tailnet can access your local running dev environment directly.
 
 ---
 
-### Option 2: Containerized Local Dev (`make build dev`)
+### Option 2: Containerized Local Dev (`make dev`)
 
-Runs the full application stack inside Docker containers using `cargo-watch` with source file volume mounts:
+Runs the full application stack inside Docker containers using `cargo-watch` with source file volume mounts and the Tailscale OSS gateway:
 
 ```bash
-make build dev
+make dev
 ```
 
+- 🌐 **Main Gateway**: `https://sda/` or `https://sda.dev.astrealabs.com/api/v1/...`
+- 🛠️ **DIY Nginx**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
+- ⚡ **Direct Container Dev API**: `http://localhost:8880`
+- 🗄️ **PostgreSQL Port**: `localhost:5433`
+- 💾 **Redis Port**: `localhost:6380`
 - **Live Source Mount**: Host repository directory (`.`) mounted to `/app`
 - **Compilation Caching**: Named volumes for `cargo_cache` and `target_cache`
-- **PostgreSQL Port**: `localhost:5433`
-- **Redis Port**: `localhost:6380`
-- **API Dev Direct**: `http://localhost:8880`
+
 
 ---
 
@@ -120,8 +134,13 @@ Set these environment variables in `docker-compose.yml`, Kubernetes manifests, o
 | `HOST` | `0.0.0.0` | Container bind address |
 | `PORT` | `8080` | Container HTTP port |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Background CelesTrak TLE sync worker |
+| `TS_AUTHKEY` | *(none)* | Tailscale reusable or ephemeral auth key for zero-touch joining |
+| `TS_HOSTNAME` | `sda` | Tailscale MagicDNS node hostname (`https://sda/`) |
+| `TS_USERSPACE` | `true` | Tailscale userspace networking (no root privileges or `/dev/net/tun` required) |
+| `TS_SERVE_CONFIG` | `/config/serve.json` | Tailscale Serve JSON proxy definition path |
 | `RSA_PRIVATE_KEY` | *(none)* | PEM string of RSA 2048 private key (for RS256 token signing) |
 | `RSA_PUBLIC_KEY` | *(none)* | PEM string of RSA 2048 public key (for RS256 token verification) |
+
 
 ---
 

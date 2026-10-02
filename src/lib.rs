@@ -206,7 +206,8 @@ pub fn create_router_with_auth(
         .route("/", get(|| async { Redirect::temporary("/swagger-ui/") }))
         .route("/docs", get(|| async { Html(REDOC_HTML) }))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .nest("/v1", api_routes)
+        .nest("/v1", api_routes.clone())
+        .nest("/api/v1", api_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
 }

@@ -46,7 +46,33 @@ services:
       retries: 5
 
   # ============================================================================
-  # Nginx Reverse Proxy (Routes astrealabs.local.com -> Host cargo-watch instance)
+  # Tailscale OSS Gateway (Main Dev Ingress - Zero /etc/hosts, Automatic TLS)
+  # ============================================================================
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: astrea-dev-hot-tailscale
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-sda}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve-hot.json
+      - TS_USERSPACE=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - tailscale_dev_hot_data:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    networks:
+      - astrea-dev-hot-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ============================================================================
+  # Nginx Reverse Proxy (DIY / Local Experimentation: astrealabs.local.com)
   # ============================================================================
   nginx:
     image: nginx:alpine
@@ -55,7 +81,6 @@ services:
     ports:
       - "8888:80"
       - "8443:443"
-      - "443:443"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -79,3 +104,6 @@ volumes:
     name: astrea_postgres_dev_hot_data
   redis_dev_hot_data:
     name: astrea_redis_dev_hot_data
+  tailscale_dev_hot_data:
+    name: astrea_tailscale_dev_hot_data
+

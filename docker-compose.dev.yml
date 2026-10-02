@@ -68,7 +68,10 @@ services:
       - cargo_cache:/usr/local/cargo
       - target_cache:/app/target
     networks:
-      - astrea-dev-net
+      astrea-dev-net:
+        aliases:
+          - api
+          - api-dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +79,28 @@ services:
         condition: service_healthy
 
   # ============================================================================
-  # Nginx Gateway (Local Dev Proxy)
+  # Tailscale OSS Gateway (Main Dev Ingress - Zero /etc/hosts, Automatic TLS)
+  # ============================================================================
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: astrea-dev-tailscale
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-sda}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=true
+    volumes:
+      - tailscale_dev_data:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    networks:
+      - astrea-dev-net
+    depends_on:
+      - api-dev
+
+  # ============================================================================
+  # Nginx Gateway (DIY / Local Experimentation Proxy)
   # ============================================================================
   nginx:
     image: nginx:alpine
@@ -85,7 +109,6 @@ services:
     ports:
       - "8888:80"
       - "8443:443"
-      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./.keys:/etc/nginx/certs:ro
@@ -108,3 +131,6 @@ volumes:
     name: astrea_cargo_cache
   target_cache:
     name: astrea_target_cache
+  tailscale_dev_data:
+    name: astrea_tailscale_dev_data
+

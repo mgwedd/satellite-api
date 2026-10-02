@@ -79,26 +79,32 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 Astrea SDA API provides 3 simple build commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
 
-#### 1. Local Host Hot-Reload (`make build dev-hot`)
-Docker DNS/Nginx/Postgres/Redis stack routing custom domain requests (`https://astrealabs.local.com/sda/api/v1`) directly to your locally running host `cargo-watch` process for instant code reloads:
+#### 1. Local Host Hot-Reload (`make dev-hot`)
+PostgreSQL + Redis + Tailscale OSS Gateway + Nginx stack with instant sub-second hot-reload via host `cargo-watch`:
+- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Real TLS)**:
+  - Swagger UI / ReDoc : `https://sda/` (or `https://sda/docs`)
+  - Direct API         : `https://sda/v1/...` or `https://sda/api/v1/...`
+  - Custom Domain      : `https://sda.dev.astrealabs.com/api/v1/...`
+- 🛠️ **DIY Nginx Gateway (Local Only)**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
 
 ```bash
-make build dev-hot
+make dev-hot
 ```
 
-#### 2. Containerized Local Dev (`make build dev`)
-Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts:
+#### 2. Containerized Local Dev (`make dev`)
+Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts and the Tailscale OSS gateway:
 
 ```bash
-make build dev
+make dev
 ```
 
-#### 3. Production Deployable Image (`make build prod`)
+#### 3. Production Deployable Image (`make prod`)
 Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
 
 ```bash
-make build prod
+make prod
 ```
+
 
 ---
 
@@ -116,6 +122,8 @@ Set environment variables to customize runtime behavior:
 | `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
+| `TS_AUTHKEY` | *(none)* | Tailscale auth key in `.env` for zero-config HTTPS gateway (`https://sda/`) |
+
 
 
 

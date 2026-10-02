@@ -7,7 +7,7 @@ ROLE ?= admin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
+.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod tailscale-status tailscale-login
 
 help: ## Display this self-documenting developer help menu
 	@echo "=============================================================================="
@@ -23,11 +23,12 @@ build: ## Build production container image (alias for make prod)
 		./scripts/docker-build.sh; \
 	fi
 
-dev-hot: ## Run host app + Docker DNS stack (Postgres + Redis + Nginx) with sub-second hot-reload
+dev-hot: ## Run host app + Docker dev stack (Postgres + Redis + Tailscale + Nginx) with sub-second hot-reload
 	@./scripts/docker-dev-hot.sh
 
-dev: ## Run fully containerized local dev stack (cargo-watch running inside Docker)
+dev: ## Run containerized local dev stack (cargo-watch + Postgres + Redis + Tailscale + Nginx)
 	@./scripts/docker-dev.sh
+
 
 prod: ## Build optimized production container image with build verification tests
 	@./scripts/docker-build.sh
@@ -148,6 +149,12 @@ sdk-rust: ## Generate Rust SDK
 logs: ## Stream Docker container logs
 	docker compose logs -f
 
+tailscale-status: ## Check Tailscale gateway connection and MagicDNS status
+	@docker compose -f docker-compose.dev.yml exec tailscale tailscale status 2>/dev/null || docker compose -f docker-compose.dev-hot.yml exec tailscale tailscale status 2>/dev/null || echo "Tailscale container is not running. Start with 'make dev' or 'make dev-hot'."
+
+tailscale-login: ## Print Tailscale interactive authentication login link
+	@docker compose -f docker-compose.dev.yml logs tailscale 2>/dev/null | grep -A 2 -B 2 "To authenticate" || docker compose -f docker-compose.dev-hot.yml logs tailscale 2>/dev/null | grep -A 2 -B 2 "To authenticate" || docker compose -f docker-compose.dev.yml logs tailscale || docker compose -f docker-compose.dev-hot.yml logs tailscale
+
 stop: ## Stop all running Docker containers across environments
 	-docker compose down
 	-docker compose -f docker-compose.dev.yml down
@@ -155,3 +162,4 @@ stop: ## Stop all running Docker containers across environments
 
 clean: stop ## Stop Docker containers and clean target build directory
 	cargo clean
+
