@@ -175,12 +175,14 @@ impl DataProvider for MemoryDataProvider {
     }
 }
 
-/// Supabase / PostgreSQL DataProvider utilizing SQLx connection pool and Row-Level Security (RLS).
-pub struct SupabasePostgresDataProvider {
+/// Native PostgreSQL DataProvider utilizing SQLx connection pool and Row-Level Security (RLS).
+pub struct PostgresDataProvider {
     pool: sqlx::PgPool,
 }
 
-impl SupabasePostgresDataProvider {
+pub type SupabasePostgresDataProvider = PostgresDataProvider;
+
+impl PostgresDataProvider {
     pub async fn connect(db_url: &str) -> Result<Self, AppError> {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(10)
@@ -231,10 +233,14 @@ impl SupabasePostgresDataProvider {
 
         Ok(Self { pool })
     }
+
+    pub fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
 }
 
 #[async_trait]
-impl DataProvider for SupabasePostgresDataProvider {
+impl DataProvider for PostgresDataProvider {
     async fn create_satellite(&self, dto: CreateSatelliteDto) -> Result<Satellite, AppError> {
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -446,5 +452,302 @@ impl DataProvider for SupabasePostgresDataProvider {
         .await
         .map_err(|e| AppError::InternalServerError(e.to_string()))?;
         Ok(())
+    }
+}
+
+/// Supabase REST DataProvider interacting with Supabase PostgREST API endpoints.
+pub struct SupabaseDataProvider {
+    supabase_url: String,
+    apikey: String,
+    client: reqwest::Client,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct SupabaseSatelliteRow {
+    id: Uuid,
+    name: String,
+    line_one: String,
+    line_two: String,
+    created_date: chrono::DateTime<Utc>,
+    last_modified_date: chrono::DateTime<Utc>,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct SupabaseTleRow {
+    line_one: String,
+    line_two: String,
+}
+
+impl SupabaseDataProvider {
+    pub fn new(supabase_url: String, apikey: String) -> Self {
+        Self {
+            supabase_url: supabase_url.trim_end_matches('/').to_string(),
+            apikey,
+            client: reqwest::Client::new(),
+        }
+    }
+
+    fn auth_headers(&self, req_builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        req_builder
+            .header("apikey", &self.apikey)
+            .header("Authorization", format!("Bearer {}", self.apikey))
+            .header("Content-Type", "application/json")
+    }
+}
+
+#[async_trait]
+impl DataProvider for SupabaseDataProvider {
+    async fn create_satellite(&self, dto: CreateSatelliteDto) -> Result<Satellite, AppError> {
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        let body = serde_json::json!({
+            "id": id,
+            "name": dto.name,
+            "line_one": dto.line_one,
+            "line_two": dto.line_two,
+            "created_date": now,
+            "last_modified_date": now
+        });
+
+        let url = format!("{}/rest/v1/satellites", self.supabase_url);
+        let resp = self
+            .auth_headers(self.client.post(&url))
+            .header("Prefer", "return=representation")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Supabase create request failed: {}", e))
+            })?;
+
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_default();
+            return Err(AppError::InternalServerError(format!(
+                "Supabase create satellite failed: {}",
+                err_text
+            )));
+        }
+
+        let history_url = format!("{}/rest/v1/tle_history", self.supabase_url);
+        let history_body = serde_json::json!({
+            "satellite_id": id,
+            "line_one": dto.line_one,
+            "line_two": dto.line_two,
+            "epoch": now
+        });
+        let _ = self
+            .auth_headers(self.client.post(&history_url))
+            .json(&history_body)
+            .send()
+            .await;
+
+        Ok(Satellite {
+            id,
+            name: dto.name,
+            tle: Tle {
+                line_one: dto.line_one,
+                line_two: dto.line_two,
+            },
+            created_date: now,
+            last_modified_date: now,
+        })
+    }
+
+    async fn get_satellite(&self, id: Uuid) -> Result<Satellite, AppError> {
+        let url = format!(
+            "{}/rest/v1/satellites?id=eq.{}&select=*",
+            self.supabase_url, id
+        );
+        let resp = self
+            .auth_headers(self.client.get(&url))
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Supabase request failed: {}", e))
+            })?;
+
+        if !resp.status().is_success() {
+            return Err(AppError::NotFound);
+        }
+
+        let rows: Vec<SupabaseSatelliteRow> = resp.json().await.map_err(|e| {
+            AppError::InternalServerError(format!("Invalid Supabase payload: {}", e))
+        })?;
+
+        let r = rows.into_iter().next().ok_or(AppError::NotFound)?;
+        Ok(Satellite {
+            id: r.id,
+            name: r.name,
+            tle: Tle {
+                line_one: r.line_one,
+                line_two: r.line_two,
+            },
+            created_date: r.created_date,
+            last_modified_date: r.last_modified_date,
+        })
+    }
+
+    async fn list_satellites(&self) -> Result<Vec<Satellite>, AppError> {
+        let url = format!("{}/rest/v1/satellites?select=*", self.supabase_url);
+        let resp = self
+            .auth_headers(self.client.get(&url))
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Supabase request failed: {}", e))
+            })?;
+
+        if !resp.status().is_success() {
+            return Ok(vec![]);
+        }
+
+        let rows: Vec<SupabaseSatelliteRow> = resp.json().await.map_err(|e| {
+            AppError::InternalServerError(format!("Invalid Supabase payload: {}", e))
+        })?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| Satellite {
+                id: r.id,
+                name: r.name,
+                tle: Tle {
+                    line_one: r.line_one,
+                    line_two: r.line_two,
+                },
+                created_date: r.created_date,
+                last_modified_date: r.last_modified_date,
+            })
+            .collect())
+    }
+
+    async fn update_satellite(
+        &self,
+        id: Uuid,
+        dto: UpdateSatelliteDto,
+    ) -> Result<Satellite, AppError> {
+        let current = self.get_satellite(id).await?;
+        let name = dto.name.unwrap_or(current.name);
+        let line_one = dto.line_one.unwrap_or(current.tle.line_one);
+        let line_two = dto.line_two.unwrap_or(current.tle.line_two);
+        let now = Utc::now();
+
+        let url = format!("{}/rest/v1/satellites?id=eq.{}", self.supabase_url, id);
+        let body = serde_json::json!({
+            "name": name,
+            "line_one": line_one,
+            "line_two": line_two,
+            "last_modified_date": now
+        });
+
+        let resp = self
+            .auth_headers(self.client.patch(&url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("Supabase update failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            return Err(AppError::NotFound);
+        }
+
+        let history_url = format!("{}/rest/v1/tle_history", self.supabase_url);
+        let history_body = serde_json::json!({
+            "satellite_id": id,
+            "line_one": line_one,
+            "line_two": line_two,
+            "epoch": now
+        });
+        let _ = self
+            .auth_headers(self.client.post(&history_url))
+            .json(&history_body)
+            .send()
+            .await;
+
+        Ok(Satellite {
+            id,
+            name,
+            tle: Tle { line_one, line_two },
+            created_date: current.created_date,
+            last_modified_date: now,
+        })
+    }
+
+    async fn delete_satellite(&self, id: Uuid) -> Result<(), AppError> {
+        let url = format!("{}/rest/v1/satellites?id=eq.{}", self.supabase_url, id);
+        let resp = self
+            .auth_headers(self.client.delete(&url))
+            .send()
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("Supabase delete failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            Err(AppError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn list_tle_history(&self, satellite_id: Uuid) -> Result<Vec<Tle>, AppError> {
+        let url = format!(
+            "{}/rest/v1/tle_history?satellite_id=eq.{}&select=line_one,line_two&order=epoch.asc",
+            self.supabase_url, satellite_id
+        );
+        let resp = self
+            .auth_headers(self.client.get(&url))
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Supabase request failed: {}", e))
+            })?;
+
+        if !resp.status().is_success() {
+            let sat = self.get_satellite(satellite_id).await?;
+            return Ok(vec![sat.tle]);
+        }
+
+        let rows: Vec<SupabaseTleRow> = resp.json().await.unwrap_or_default();
+
+        if rows.is_empty() {
+            let sat = self.get_satellite(satellite_id).await?;
+            Ok(vec![sat.tle])
+        } else {
+            Ok(rows
+                .into_iter()
+                .map(|r| Tle {
+                    line_one: r.line_one,
+                    line_two: r.line_two,
+                })
+                .collect())
+        }
+    }
+
+    async fn add_tle_history(&self, satellite_id: Uuid, tle: Tle) -> Result<(), AppError> {
+        let url = format!("{}/rest/v1/tle_history", self.supabase_url);
+        let now = Utc::now();
+        let body = serde_json::json!({
+            "satellite_id": satellite_id,
+            "line_one": tle.line_one,
+            "line_two": tle.line_two,
+            "epoch": now
+        });
+
+        let resp = self
+            .auth_headers(self.client.post(&url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Supabase insert TLE failed: {}", e))
+            })?;
+
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_default();
+            Err(AppError::InternalServerError(format!(
+                "Supabase insert TLE history failed: {}",
+                err_text
+            )))
+        } else {
+            Ok(())
+        }
     }
 }
