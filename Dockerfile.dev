@@ -1,7 +1,7 @@
 # ==============================================================================
 # ASTREA SDA API - Containerized Development Dockerfile (Hot-Reloading)
 # ==============================================================================
-FROM rust:1.80-alpine
+FROM rust:1-alpine
 
 WORKDIR /app
 

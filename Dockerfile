@@ -2,7 +2,7 @@
 # ASTREA SDA API - Production Multi-Stage Dockerfile
 # ==============================================================================
 # Stage 1: Build & Verification Stage
-FROM rust:1.80-alpine AS builder
+FROM rust:1-alpine AS builder
 
 WORKDIR /usr/src/astrea-sda-api
 
@@ -16,7 +16,7 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && \
     echo "pub fn dummy() {}" > src/lib.rs && \
     echo "fn main() {}" > src/main.rs && \
-    cargo build --release --lib && \
+    cargo build --release --lib --locked && \
     rm -rf src
 
 # Copy real source code, migrations, and test suite
@@ -28,10 +28,10 @@ COPY migrations ./migrations
 RUN touch src/lib.rs src/main.rs
 
 # Run full automated verification test suite prior to release packaging
-RUN cargo test --release --offline || cargo test --release
+RUN cargo test --release --offline --locked || cargo test --release --locked
 
 # Build optimized production release binary
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # ==============================================================================
 # Stage 2: Minimal Production Runtime Container
