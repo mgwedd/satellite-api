@@ -26,6 +26,7 @@ async fn test_auth_security_rejects_hs256_algorithm_confusion() {
         role: "admin".to_string(),
         roles: Some(vec!["admin".to_string()]),
         scope: Some("read:satellites write:satellites admin:satellites".to_string()),
+        cnf: None,
     };
 
     // Attacker crafts token using HS256 algorithm with a secret key
@@ -73,6 +74,7 @@ async fn test_auth_security_rejects_expired_and_tampered_rs256_tokens() {
         role: "admin".to_string(),
         roles: Some(vec!["admin".to_string()]),
         scope: Some("read:satellites write:satellites admin:satellites".to_string()),
+        cnf: None,
     };
 
     let private_pem = get_rsa_private_key_pem();
@@ -276,5 +278,131 @@ async fn test_auth_security_case_insensitive_bearer_header() {
         response.status(),
         StatusCode::CREATED,
         "Case-insensitive 'bearer' prefix must be accepted per RFC 6750"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_security_m2m_client_assertion_token_exchange() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    let (assertion_token, _) = create_jwt_token("m2m_telemetry_worker", "editor", 300).unwrap();
+
+    let token_exchange_payload = json!({
+        "grantType": "client_credentials",
+        "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "clientAssertion": assertion_token
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/auth/token")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&token_exchange_payload).unwrap(),
+        ))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "RFC 7523 M2M Client Assertion Token Exchange must succeed and issue Bearer token"
+    );
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let auth_res: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(auth_res["token"].is_string());
+    assert_eq!(auth_res["claims"]["sub"], "m2m_telemetry_worker");
+}
+
+#[tokio::test]
+async fn test_auth_security_mtls_certificate_bound_token_validation() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    let (assertion_token, _) = create_jwt_token("mtls_m2m_daemon", "editor", 300).unwrap();
+    let client_cert_fingerprint =
+        "8f3c7e91a02b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d";
+
+    // 1. Exchange client assertion with X-Client-Cert-Fingerprint header -> Issues bound token
+    let token_exchange_payload = json!({
+        "grantType": "client_credentials",
+        "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "clientAssertion": assertion_token
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/auth/token")
+        .header("content-type", "application/json")
+        .header("x-client-cert-fingerprint", client_cert_fingerprint)
+        .body(Body::from(
+            serde_json::to_vec(&token_exchange_payload).unwrap(),
+        ))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let auth_res: Value = serde_json::from_slice(&body_bytes).unwrap();
+    let bound_token = auth_res["token"].as_str().unwrap();
+
+    // Verify cnf claim was attached
+    assert_eq!(
+        auth_res["claims"]["cnf"]["x5t#S256"],
+        client_cert_fingerprint
+    );
+
+    // 2. Request using bound token with MATCHING client cert fingerprint -> 200 OK
+    let req = Request::builder()
+        .method("GET")
+        .uri("/v1/auth/me")
+        .header("authorization", format!("Bearer {}", bound_token))
+        .header("x-client-cert-fingerprint", client_cert_fingerprint)
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "mTLS request with matching client cert fingerprint must succeed"
+    );
+
+    // 3. Request using bound token with MISMATCHED client cert fingerprint -> 401 Unauthorized
+    let req = Request::builder()
+        .method("GET")
+        .uri("/v1/auth/me")
+        .header("authorization", format!("Bearer {}", bound_token))
+        .header("x-client-cert-fingerprint", "ATTACKER_CERT_FINGERPRINT")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "mTLS request with mismatched client cert fingerprint must be rejected"
+    );
+
+    // 4. Request using bound token without any client cert header -> 401 Unauthorized
+    let req = Request::builder()
+        .method("GET")
+        .uri("/v1/auth/me")
+        .header("authorization", format!("Bearer {}", bound_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "mTLS request missing client cert fingerprint header must be rejected"
     );
 }

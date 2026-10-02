@@ -4,7 +4,7 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Axum](https://img.shields.io/badge/Axum-0.7-blue.svg)](https://github.com/tokio-rs/axum)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-green.svg)](http://localhost:3000/swagger-ui)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-green.svg)](http://localhost:8080/swagger-ui)
 [![Fern SDKs](https://img.shields.io/badge/Fern-SDKs-purple.svg)](https://buildwithfern.com/)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-brightgreen.svg)](#-license)
 
@@ -110,15 +110,14 @@ Set environment variables to customize runtime behavior:
 | :--- | :--- | :--- |
 | `HOST` | `0.0.0.0` | Bind host address |
 | `PORT` | `8080` | Listening HTTP port |
-| `RSA_PRIVATE_KEY` | *(none)* | **[Production]** Direct PEM string of RSA 2048 private key injected from secret manager / vault (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager) |
-| `RSA_PUBLIC_KEY` | *(none)* | **[Production]** Direct PEM string of RSA 2048 public key injected from secret manager / vault |
-| `LOCAL_DEV_RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | **[LOCAL DEV ONLY]** Path to local RSA private key PEM file. *Do not use in production deployments.* |
-| `LOCAL_DEV_RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | **[LOCAL DEV ONLY]** Path to local RSA public key PEM file. *Do not use in production deployments.* |
+| `RSA_PRIVATE_KEY` | *(none)* | Direct PEM string of RSA 2048 private key for signing RS256 JWT tokens |
+| `RSA_PUBLIC_KEY` | *(none)* | Direct PEM string of RSA 2048 public key for verifying RS256 JWT tokens |
+| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | Path to RSA private key PEM file |
+| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
 
-> 🔒 **Production Secret & Key Management**:
-> Never load RSA key material from disk files (`LOCAL_DEV_RSA_PRIVATE_KEY_FILE` / `.keys/`) on production machines or container filesystems. In production environments, key secrets must be stored in a dedicated key vault / secret manager (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager, Railway/Supabase secrets) and injected directly via `RSA_PRIVATE_KEY` and `RSA_PUBLIC_KEY` environment variables.
+
 
 ---
 
@@ -128,6 +127,8 @@ Set environment variables to customize runtime behavior:
 [![OpenAPI 3.0 Spec](https://img.shields.io/badge/OpenAPI_3.0_Spec-JSON-green?style=for-the-badge&logo=json&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/openapi.json)
 
 The complete interactive specification, request playgrounds, and schema contracts are hosted on **[GitHub Pages](https://mgwedd.github.io/astrea-sda-api/)**.
+
+---
 
 ## 🌐 Interactive UI & API Explorer
 
@@ -168,30 +169,72 @@ open api-docs/index.html
 
 ### 1. List Satellites (Paginated)
 ```bash
-curl -s "http://localhost:3000/v1/satellites?limit=5" | jq
+curl -s "http://localhost:8080/v1/satellites?limit=5" | jq
 ```
 
 ### 2. Generate 3D Ground Track & GeoJSON Trajectory
 ```bash
-curl -s "http://localhost:3000/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+curl -s "http://localhost:8080/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
 ```
 
 ### 3. Find Overhead Satellites for Observer Location
 Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
 ```bash
-curl -s "http://localhost:3000/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+curl -s "http://localhost:8080/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
 ### 4. Compute Next Visible Pass for Satellite
 ```bash
-curl -s "http://localhost:3000/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
+curl -s "http://localhost:8080/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```
 
-### 4. Trigger Manual CelesTrak Sync
+### 5. Trigger Manual CelesTrak Sync
 Sync space station TLE data:
 ```bash
-curl -X POST "http://localhost:3000/v1/pipelines/sync?group=stations" | jq
+curl -X POST "http://localhost:8080/v1/pipelines/sync?group=stations" | jq
 ```
+
+---
+
+## 🔐 Comprehensive Authentication Architecture & M2M Security
+
+Astrea SDA API features a modular, enterprise-grade authentication system supporting dynamic developer credentials, Machine-to-Machine (M2M) private key assertions, and Mutual TLS (mTLS) certificate-bound access tokens.
+
+```
+                  ┌─────────────────────────────────────────────────────────┐
+                  │                 AUTHENTICATION ARCHITECTURE             │
+                  └─────────────────────────────────────────────────────────┘
+                                               │
+       ┌───────────────────────────────────────┼───────────────────────────────────────┐
+       ▼                                       ▼                                       ▼
+┌──────────────┐                       ┌──────────────┐                        ┌──────────────┐
+│  Developer   │                       │   M2M PK     │                        │ RFC 8705 mTLS│
+│ Dynamic Auth │                       │    JWTCA     │                        │ Cert-Bound   │
+└──────────────┘                       └──────────────┘                        └──────────────┘
+  POST /v1/auth/login                    POST /v1/auth/token                     POST /v1/auth/token
+  (No stored passwords)                  (RFC 7523 Private Key)                  (x5t#S256 Binding)
+```
+
+### 1. Dynamic Authentication (Password-Free SDK Initializers)
+SDK clients authenticate dynamically via `/v1/auth/login` or `/v1/auth/signup` to obtain short-lived RS256 Bearer JWT tokens. No static passwords or long-lived API keys are baked into client environments or code repositories.
+
+### 2. RFC 7523 M2M Private Key JWT Client Assertion (`POST /v1/auth/token`)
+For automated background services, microservices, and satellite ingest pipelines, Astrea SDA API supports RFC 7523 Machine-to-Machine authentication. Services sign a client assertion payload with their private RSA key and exchange it for a scoped Bearer token without transmitting static shared secrets:
+
+```bash
+curl -X POST "http://localhost:8080/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grantType": "client_credentials",
+    "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    "clientAssertion": "<SIGNED_RSA_JWT_ASSERTION>"
+  }'
+```
+
+### 3. RFC 8705 Mutual TLS (mTLS) Certificate-Bound Tokens (`cnf` Claim)
+For ultra-secure defense and aerospace infrastructure, tokens issued during client assertion token exchange can be bound to the caller's client X.509 certificate SHA-256 fingerprint (`cnf.x5t#S256`).
+- Supplying the `X-Client-Cert-Fingerprint` (or `X-Client-Cert-Hash`) header during token exchange embeds a `cnf` claim in the issued JWT.
+- Every subsequent request using a certificate-bound token **must** present the matching client certificate fingerprint header. Stolen Bearer tokens are completely unusable without the matching TLS certificate.
 
 ---
 
@@ -199,9 +242,9 @@ curl -X POST "http://localhost:3000/v1/pipelines/sync?group=stations" | jq
 
 Ergonomic SDKs for **TypeScript**, **Python**, **Go**, **Java**, and **Rust** are generated automatically from the OpenAPI specification using [Fern](https://buildwithfern.com/).
 
-### 🔑 Authenticating with SDKs
+### 🔑 Dynamic Auth & Ergonomic SDK Initialization
 
-In production applications, client applications authenticate dynamically at startup via your Auth Provider (`/v1/auth/login` endpoint or Supabase Auth SDK) to retrieve an authenticated JWT token, then instantiate the SDK client:
+In production applications, client applications authenticate dynamically at startup via your Auth Provider (`/v1/auth/login` endpoint or Supabase Auth SDK) to retrieve an authenticated JWT token, or use M2M Private Key assertions, then instantiate the SDK client:
 
 **TypeScript / Node.js**:
 ```typescript
@@ -211,10 +254,10 @@ import { AstreaSdaApiClient } from "./sdks/typescript";
 const authResponse = await fetch("http://localhost:8080/v1/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ email: "operator@example.com", password: "securepassword" })
+  body: JSON.stringify({ email: "operator@example.com", password: process.env.OPERATOR_PASSWORD })
 }).then(res => res.json());
 
-// 2. Initialize SDK client with the dynamically acquired JWT Bearer token
+// 2. Initialize SDK client with the dynamically acquired JWT Bearer token (or M2M assertion token)
 const client = new AstreaSdaApiClient({
   token: authResponse.token,
   environment: "http://localhost:8080"
@@ -230,13 +273,14 @@ await client.satellites.createSatellite({
 
 **Python**:
 ```python
+import os
 import requests
 from sdks.python import AstreaSdaApiClient
 
 # 1. Authenticate at application startup via Auth Provider
 auth_response = requests.post(
     "http://localhost:8080/v1/auth/login",
-    json={"email": "operator@example.com", "password": "securepassword"}
+    json={"email": "operator@example.com", "password": os.environ["OPERATOR_PASSWORD"]}
 ).json()
 
 # 2. Initialize SDK client with the dynamically acquired JWT Bearer token
@@ -255,29 +299,48 @@ client.satellites.create_satellite(
 
 **Go**:
 ```go
+package main
+
 import (
     "bytes"
     "encoding/json"
     "net/http"
+    "os"
     "sdks/go/client"
 )
 
-// 1. Authenticate via Auth Provider endpoint /v1/auth/login or Supabase Auth
-payload, _ := json.Marshal(map[string]string{
-    "email":    "operator@example.com",
-    "password": "securepassword",
-})
-resp, _ := http.Post("http://localhost:8080/v1/auth/login", "application/json", bytes.NewBuffer(payload))
-var authResp struct {
-    Token string `json:"token"`
-}
-json.NewDecoder(resp.Body).Decode(&authResp)
+func main() {
+    // 1. Authenticate via Auth Provider endpoint /v1/auth/login or Supabase Auth
+    payload, _ := json.Marshal(map[string]string{
+        "email":    "operator@example.com",
+        "password": os.Getenv("OPERATOR_PASSWORD"),
+    })
+    resp, _ := http.Post("http://localhost:8080/v1/auth/login", "application/json", bytes.NewBuffer(payload))
+    var authResp struct {
+        Token string `json:"token"`
+    }
+    json.NewDecoder(resp.Body).Decode(&authResp)
 
-// 2. Initialize SDK client with dynamically acquired JWT token
-sdk := client.NewClient(
-    client.WithToken(authResp.Token),
-    client.WithBaseURL("http://localhost:8080"),
-)
+    // 2. Initialize SDK client with dynamically acquired JWT token
+    sdk := client.NewClient(
+        client.WithToken(authResp.Token),
+        client.WithBaseURL("http://localhost:8080"),
+    )
+}
+```
+
+**Rust**:
+```rust
+use astrea_sda_api_sdk::AstreaSdaApiClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = AstreaSdaApiClient::builder()
+        .base_url("http://localhost:8080")
+        .bearer_token(std::env::var("ASTREA_BEARER_TOKEN")?)
+        .build()?;
+    Ok(())
+}
 ```
 
 > 💡 **Local Dev Note**: For local CLI script testing and manual curl calls during development, you can generate a test token using `./scripts/make-jwt.sh operator_user operator`. Production applications should always authenticate dynamically via Auth Providers at startup.

@@ -209,6 +209,58 @@
         }
       }
     },
+    "/v1/auth/token": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "RFC 7523 Private Key JWT Client Assertion M2M Token Exchange",
+        "description": "Authenticates machine-to-machine service accounts via signed RSA Private Key assertions (`client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`) and returns a scoped RS256 JWT Bearer token.",
+        "operationId": "tokenExchangeHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientAssertionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "M2M Client assertion verified and JWT Bearer token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid client assertion format or unsupported grant type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid assertion signature or expired timestamp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/conjunctions/search": {
       "get": {
         "tags": [
@@ -1416,6 +1468,14 @@
             "description": "Token audience (target API audience)",
             "nullable": true
           },
+          "cnf": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CnfClaim"
+              }
+            ],
+            "nullable": true
+          },
           "exp": {
             "type": "integer",
             "description": "Expiration timestamp in seconds since Unix epoch",
@@ -1451,6 +1511,47 @@
           "sub": {
             "type": "string",
             "description": "Subject (User ID, username, or client service ID)"
+          }
+        }
+      },
+      "ClientAssertionRequest": {
+        "type": "object",
+        "description": "Request body for RFC 7523 Private Key JWT Client Assertion token exchange (M2M authentication).",
+        "required": [
+          "grantType",
+          "clientAssertionType",
+          "clientAssertion"
+        ],
+        "properties": {
+          "clientAssertion": {
+            "type": "string",
+            "description": "RS256-signed JWT assertion token generated using client's RSA private key"
+          },
+          "clientAssertionType": {
+            "type": "string",
+            "description": "Client assertion type (must be \"urn:ietf:params:oauth:client-assertion-type:jwt-bearer\")"
+          },
+          "grantType": {
+            "type": "string",
+            "description": "OAuth 2.0 grant type (must be \"client_credentials\" or \"urn:ietf:params:oauth:grant-type:jwt-bearer\")"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional requested OAuth 2.0 scope",
+            "nullable": true
+          }
+        }
+      },
+      "CnfClaim": {
+        "type": "object",
+        "description": "RFC 8705 OIDC Confirmation Claim (`cnf`) containing SHA-256 certificate thumbprint (`x5t#S256`).",
+        "required": [
+          "x5t#S256"
+        ],
+        "properties": {
+          "x5t#S256": {
+            "type": "string",
+            "description": "SHA-256 base64url-encoded client certificate thumbprint"
           }
         }
       },

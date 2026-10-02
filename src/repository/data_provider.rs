@@ -26,6 +26,10 @@ pub trait DataProvider: Send + Sync {
     async fn delete_satellite(&self, id: Uuid) -> Result<(), AppError>;
     async fn list_tle_history(&self, satellite_id: Uuid) -> Result<Vec<Tle>, AppError>;
     async fn add_tle_history(&self, satellite_id: Uuid, tle: Tle) -> Result<(), AppError>;
+    async fn batch_upsert_satellites(
+        &self,
+        dtos: Vec<CreateSatelliteDto>,
+    ) -> Result<usize, AppError>;
 }
 
 /// In-memory DataProvider fallback for offline testing and fast development.
@@ -178,6 +182,80 @@ impl DataProvider for MemoryDataProvider {
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
         history.entry(satellite_id).or_default().push(tle);
         Ok(())
+    }
+
+    async fn batch_upsert_satellites(
+        &self,
+        dtos: Vec<CreateSatelliteDto>,
+    ) -> Result<usize, AppError> {
+        let mut count = 0;
+        let now = Utc::now();
+        for dto in dtos {
+            let existing_id = {
+                let store = self
+                    .store
+                    .read()
+                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                store
+                    .values()
+                    .find(|s| s.name.eq_ignore_ascii_case(&dto.name))
+                    .map(|s| s.id)
+            };
+
+            if let Some(id) = existing_id {
+                {
+                    let mut store = self
+                        .store
+                        .write()
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    if let Some(sat) = store.get_mut(&id) {
+                        sat.name = dto.name.clone();
+                        sat.tle.line_one = dto.line_one.clone();
+                        sat.tle.line_two = dto.line_two.clone();
+                        sat.last_modified_date = now;
+                    }
+                }
+                {
+                    let mut history = self
+                        .tle_history
+                        .write()
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    history.entry(id).or_default().push(Tle {
+                        line_one: dto.line_one,
+                        line_two: dto.line_two,
+                    });
+                }
+            } else {
+                let id = Uuid::new_v4();
+                let tle = Tle {
+                    line_one: dto.line_one.clone(),
+                    line_two: dto.line_two.clone(),
+                };
+                let sat = Satellite {
+                    id,
+                    name: dto.name,
+                    tle: tle.clone(),
+                    created_date: now,
+                    last_modified_date: now,
+                };
+                {
+                    let mut store = self
+                        .store
+                        .write()
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    store.insert(id, sat);
+                }
+                {
+                    let mut history = self
+                        .tle_history
+                        .write()
+                        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                    history.entry(id).or_default().push(tle);
+                }
+            }
+            count += 1;
+        }
+        Ok(count)
     }
 }
 
@@ -458,6 +536,78 @@ impl DataProvider for PostgresDataProvider {
         .await
         .map_err(|e| AppError::InternalServerError(e.to_string()))?;
         Ok(())
+    }
+
+    async fn batch_upsert_satellites(
+        &self,
+        dtos: Vec<CreateSatelliteDto>,
+    ) -> Result<usize, AppError> {
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to begin batch transaction: {}", e))
+        })?;
+
+        let now = Utc::now();
+        let mut count = 0;
+
+        for dto in dtos {
+            let row = sqlx::query("SELECT id FROM satellites WHERE LOWER(name) = LOWER($1)")
+                .bind(&dto.name)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+
+            let sat_id = if let Some(r) = row {
+                let id: Uuid = r
+                    .try_get("id")
+                    .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                sqlx::query(
+                    "UPDATE satellites SET name = $1, line_one = $2, line_two = $3, last_modified_date = $4 WHERE id = $5",
+                )
+                .bind(&dto.name)
+                .bind(&dto.line_one)
+                .bind(&dto.line_two)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                id
+            } else {
+                let id = Uuid::new_v4();
+                sqlx::query(
+                    "INSERT INTO satellites (id, name, line_one, line_two, created_date, last_modified_date) VALUES ($1, $2, $3, $4, $5, $6)",
+                )
+                .bind(id)
+                .bind(&dto.name)
+                .bind(&dto.line_one)
+                .bind(&dto.line_two)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+                id
+            };
+
+            sqlx::query(
+                "INSERT INTO tle_history (satellite_id, line_one, line_two, epoch) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(sat_id)
+            .bind(&dto.line_one)
+            .bind(&dto.line_two)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+
+            count += 1;
+        }
+
+        tx.commit().await.map_err(|e| {
+            AppError::InternalServerError(format!("Failed to commit batch transaction: {}", e))
+        })?;
+
+        Ok(count)
     }
 }
 
@@ -757,5 +907,31 @@ impl DataProvider for SupabaseDataProvider {
         } else {
             Ok(())
         }
+    }
+
+    async fn batch_upsert_satellites(
+        &self,
+        dtos: Vec<CreateSatelliteDto>,
+    ) -> Result<usize, AppError> {
+        let mut count = 0;
+        for dto in dtos {
+            let existing_satellites = self.list_satellites().await?;
+            let existing = existing_satellites
+                .into_iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&dto.name));
+
+            if let Some(sat) = existing {
+                let update_dto = UpdateSatelliteDto {
+                    name: Some(dto.name),
+                    line_one: Some(dto.line_one),
+                    line_two: Some(dto.line_two),
+                };
+                let _ = self.update_satellite(sat.id, update_dto).await?;
+            } else {
+                let _ = self.create_satellite(dto).await?;
+            }
+            count += 1;
+        }
+        Ok(count)
     }
 }
