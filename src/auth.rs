@@ -186,7 +186,7 @@ pub struct AuthResponse {
 /// Returns the RSA 2048 private key PEM for signing RS256 tokens.
 ///
 /// ⚠️ **LOCAL DEVELOPMENT ONLY**:
-/// Reading key material from file paths (`RSA_PRIVATE_KEY_FILE` / `.keys/rsa_private.pem`) or
+/// Reading key material from file paths (`LOCAL_DEV_RSA_PRIVATE_KEY_FILE` / `.keys/rsa_private.pem`) or
 /// falling back to in-memory ephemeral keys is strictly intended for local dev and testing.
 ///
 /// **Production Security**:
@@ -197,7 +197,7 @@ pub struct AuthResponse {
 ///
 /// Resolution order:
 /// 1. Direct PEM string from `RSA_PRIVATE_KEY` environment variable (Production / Vault injection).
-/// 2. [LOCAL DEV ONLY] File path from `RSA_PRIVATE_KEY_FILE` environment variable or `.keys/rsa_private.pem`.
+/// 2. [LOCAL DEV ONLY] File path from `LOCAL_DEV_RSA_PRIVATE_KEY_FILE` (or fallback `RSA_PRIVATE_KEY_FILE`) environment variable or `.keys/rsa_private.pem`.
 /// 3. [LOCAL DEV ONLY] Ephemeral in-memory RSA 2048 private key fallback.
 pub fn get_rsa_private_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PRIVATE_KEY") {
@@ -206,7 +206,8 @@ pub fn get_rsa_private_key_pem() -> String {
         }
     }
 
-    let file_path = std::env::var("RSA_PRIVATE_KEY_FILE")
+    let file_path = std::env::var("LOCAL_DEV_RSA_PRIVATE_KEY_FILE")
+        .or_else(|_| std::env::var("RSA_PRIVATE_KEY_FILE"))
         .unwrap_or_else(|_| ".keys/rsa_private.pem".to_string());
     if let Ok(contents) = std::fs::read_to_string(&file_path) {
         if !contents.trim().is_empty() {
@@ -225,7 +226,7 @@ pub fn get_rsa_private_key_pem() -> String {
 /// Returns the RSA 2048 public key PEM for verifying RS256 signatures.
 ///
 /// ⚠️ **LOCAL DEVELOPMENT ONLY**:
-/// Reading key material from file paths (`RSA_PUBLIC_KEY_FILE` / `.keys/rsa_public.pem`) or
+/// Reading key material from file paths (`LOCAL_DEV_RSA_PUBLIC_KEY_FILE` / `.keys/rsa_public.pem`) or
 /// falling back to in-memory ephemeral keys is strictly intended for local dev and testing.
 ///
 /// **Production Security**:
@@ -234,7 +235,7 @@ pub fn get_rsa_private_key_pem() -> String {
 ///
 /// Resolution order:
 /// 1. Direct PEM string from `RSA_PUBLIC_KEY` environment variable (Production / Vault injection).
-/// 2. [LOCAL DEV ONLY] File path from `RSA_PUBLIC_KEY_FILE` environment variable or `.keys/rsa_public.pem`.
+/// 2. [LOCAL DEV ONLY] File path from `LOCAL_DEV_RSA_PUBLIC_KEY_FILE` (or fallback `RSA_PUBLIC_KEY_FILE`) environment variable or `.keys/rsa_public.pem`.
 /// 3. [LOCAL DEV ONLY] Ephemeral in-memory RSA 2048 public key fallback.
 pub fn get_rsa_public_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PUBLIC_KEY") {
@@ -243,8 +244,9 @@ pub fn get_rsa_public_key_pem() -> String {
         }
     }
 
-    let file_path =
-        std::env::var("RSA_PUBLIC_KEY_FILE").unwrap_or_else(|_| ".keys/rsa_public.pem".to_string());
+    let file_path = std::env::var("LOCAL_DEV_RSA_PUBLIC_KEY_FILE")
+        .or_else(|_| std::env::var("RSA_PUBLIC_KEY_FILE"))
+        .unwrap_or_else(|_| ".keys/rsa_public.pem".to_string());
     if let Ok(contents) = std::fs::read_to_string(&file_path) {
         if !contents.trim().is_empty() {
             tracing::debug!(

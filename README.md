@@ -105,13 +105,13 @@ Set environment variables to customize runtime behavior:
 | `PORT` | `8080` | Listening HTTP port |
 | `RSA_PRIVATE_KEY` | *(none)* | **[Production]** Direct PEM string of RSA 2048 private key injected from secret manager / vault (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager) |
 | `RSA_PUBLIC_KEY` | *(none)* | **[Production]** Direct PEM string of RSA 2048 public key injected from secret manager / vault |
-| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | **[LOCAL DEV ONLY]** Path to local RSA private key PEM file. *Do not use in production deployments.* |
-| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | **[LOCAL DEV ONLY]** Path to local RSA public key PEM file. *Do not use in production deployments.* |
+| `LOCAL_DEV_RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | **[LOCAL DEV ONLY]** Path to local RSA private key PEM file. *Do not use in production deployments.* |
+| `LOCAL_DEV_RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | **[LOCAL DEV ONLY]** Path to local RSA public key PEM file. *Do not use in production deployments.* |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
 
 > 🔒 **Production Secret & Key Management**:
-> Never load RSA key material from disk files (`RSA_PRIVATE_KEY_FILE` / `.keys/`) on production machines or container filesystems. In production environments, key secrets must be stored in a dedicated key vault / secret manager (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager, Railway/Supabase secrets) and injected directly via `RSA_PRIVATE_KEY` and `RSA_PUBLIC_KEY` environment variables.
+> Never load RSA key material from disk files (`LOCAL_DEV_RSA_PRIVATE_KEY_FILE` / `.keys/`) on production machines or container filesystems. In production environments, key secrets must be stored in a dedicated key vault / secret manager (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager, Railway/Supabase secrets) and injected directly via `RSA_PRIVATE_KEY` and `RSA_PUBLIC_KEY` environment variables.
 
 ---
 
