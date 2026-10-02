@@ -1,3 +1,9 @@
+//! DataProvider Abstraction Layer
+//!
+//! Separates generic storage drivers from cloud-specific providers:
+//! - **Generic Drivers**: `MemoryDataProvider` (dev/testing), `PostgresDataProvider` (`sqlx` / `tokio-postgres`)
+//! - **Cloud Providers**: `SupabaseDataProvider` (`postgrest-rs` official SDK)
+
 use crate::error::AppError;
 use crate::models::{CreateSatelliteDto, Satellite, Tle, UpdateSatelliteDto};
 use axum::async_trait;
