@@ -6,7 +6,7 @@
 USER ?= admin_user
 ROLE ?= admin
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk hooks install logs stop clean build-dev-hot build-dev build-prod
+.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
 
 help:
 	@echo "=============================================================================="
@@ -16,7 +16,8 @@ help:
 	@echo "  make dev-hot      (or make build dev-hot) - Docker DNS/Nginx stack with local host app hot-reload"
 	@echo "  make dev          (or make build dev)     - Fully containerized local dev stack (cargo-watch in Docker)"
 	@echo "  make prod         (or make build prod)    - Build optimized production container image (with build tests)"
-	@echo "  make install                              - Install binary locally into ~/.cargo/bin with keys & hooks"
+	@echo "  make install                              - Install binary locally into ~/.cargo/bin"
+	@echo "  make install-dev                          - Full developer setup (cargo-watch, fern, keys, hooks, binary)"
 	@echo ""
 	@echo "CODE QUALITY & TESTING:"
 	@echo "  make check                                - Run fast offline compilation check"
@@ -56,10 +57,28 @@ dev:
 prod:
 	@./scripts/docker-build.sh
 
-install: keys hooks
+install:
 	@echo "Installing astrea-sda-api binary locally..."
 	cargo install --path .
 	@echo "✅ Installed astrea-sda-api binary into ~/.cargo/bin/astrea-sda-api"
+
+install-dev: keys hooks install
+	@echo "=========================================================="
+	@echo "🛠️ Installing Local Developer Tooling & Dependencies..."
+	@echo "=========================================================="
+	@if ! command -v cargo-watch &> /dev/null; then \
+		echo "📦 Installing cargo-watch for hot reloading..."; \
+		cargo install cargo-watch; \
+	else \
+		echo "✅ cargo-watch is already installed"; \
+	fi
+	@if ! command -v fern &> /dev/null && command -v npm &> /dev/null; then \
+		echo "📦 Installing fern-api CLI for SDK generation..."; \
+		npm install -g fern-api || true; \
+	fi
+	@echo "=========================================================="
+	@echo "✅ Developer environment fully initialized!"
+	@echo "=========================================================="
 
 build-dev-hot: dev-hot
 build-dev: dev
