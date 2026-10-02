@@ -81,6 +81,9 @@ services:
     image: caddy:2-alpine
     container_name: astrea-caddy
     restart: unless-stopped
+    profiles:
+      - local
+      - gateway
     ports:
       - "8888:8888"
       - "8443:8443"

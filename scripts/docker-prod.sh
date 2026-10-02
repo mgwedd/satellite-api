@@ -12,8 +12,8 @@ echo "=========================================================="
 ./scripts/setup-keys.sh
 
 echo ""
-echo "🐳 Spinning up PostgreSQL, Redis, Astrea API, and Caddy..."
-docker compose up -d --build "$@"
+echo "🐳 Spinning up PostgreSQL, Redis, Astrea API, and Caddy (local profile)..."
+docker compose --profile local up -d --build "$@"
 
 echo ""
 echo "=========================================================="
