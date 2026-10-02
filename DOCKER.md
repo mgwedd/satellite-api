@@ -49,10 +49,10 @@ docker compose up -d
 ./scripts/docker-prod.sh
 ```
 
-- **Nginx Gateway**: `http://localhost:80`
-- **Direct API Server**: `http://localhost:8080`
-- **Swagger UI Playground**: `http://localhost:8080/swagger-ui`
-- **Health Check**: `curl -f http://localhost:80/nginx-health`
+- **Nginx Gateway**: `http://localhost:8888`
+- **Direct API Server**: `http://localhost:8880`
+- **Swagger UI Playground**: `http://localhost:8880/swagger-ui`
+- **Health Check**: `curl -f http://localhost:8888/nginx-health`
 
 ---
 
@@ -69,9 +69,9 @@ docker compose -f docker-compose.dev.yml up --build
 
 - **Live Source Mount**: Host repository directory (`.`) mounted to `/app`
 - **Compilation Caching**: Named volumes for `cargo_cache` and `target_cache`
-- **PostgreSQL Port**: `localhost:5432`
-- **Redis Port**: `localhost:6379`
-- **API Dev Endpoint**: `http://localhost:8080`
+- **PostgreSQL Port**: `localhost:5433`
+- **Redis Port**: `localhost:6380`
+- **API Dev Endpoint**: `http://localhost:8880`
 
 ---
 

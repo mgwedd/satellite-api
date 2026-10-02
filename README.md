@@ -89,9 +89,9 @@ docker compose up -d
 # Or via script:
 ./scripts/docker-prod.sh
 ```
-- **Gateway (Nginx)**: `http://localhost:80`
-- **API Endpoint**: `http://localhost:8080`
-- **Swagger UI**: `http://localhost:8080/swagger-ui`
+- **Gateway (Nginx)**: `http://localhost:8888`
+- **API Endpoint**: `http://localhost:8880`
+- **Swagger UI**: `http://localhost:8880/swagger-ui`
 
 #### Option 2: Containerized Local Dev with Hot-Reloading (`cargo watch`)
 Runs source files inside a container with live hot-reloading on code edits:
