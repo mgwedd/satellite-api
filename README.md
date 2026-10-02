@@ -1,245 +1,99 @@
 # 🛰️ Astrea Space Domain Awareness (SDA) API
 
-High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital satellite tracking, SGP4 propagation, ground station visibility predictions, and CelesTrak TLE dataset synchronization.
+High-performance, low-latency Rust API for Space Domain Awareness (SDA), real-time satellite tracking, SGP4 orbital propagation, ground station visibility predictions, and automated CelesTrak TLE synchronization.
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Axum](https://img.shields.io/badge/Axum-0.7-blue.svg)](https://github.com/tokio-rs/axum)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.0-green.svg)](http://localhost:8080/swagger-ui)
+[![Interactive OpenAPI Docs](https://img.shields.io/badge/Interactive_OpenAPI_Docs-GitHub_Pages-blue?logo=openapi-initiative&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/)
+[![OpenAPI Spec](https://img.shields.io/badge/OpenAPI_3.0_Spec-JSON-green?logo=json&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/openapi.json)
 [![Fern SDKs](https://img.shields.io/badge/Fern-SDKs-purple.svg)](https://buildwithfern.com/)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-brightgreen.svg)](#-license)
 
 ---
 
-## 🚀 Key Features
+## ⚡ Quickstart (Zero to Orbit in 30 Seconds)
 
-* ⚡ **Sub-Millisecond Orbital Propagation**: Built with **Axum 0.7**, **Tokio**, and **SGP4** astrodynamics libraries with parallel Rayon multi-threading.
-* 📍 **Ground Station Pass Prediction**: Calculate real-time satellite positions, overhead passes, and next-visible window calculations given observer latitude, longitude, and elevation threshold.
-* 🏎️ **Tiered In-Memory & Distributed Caching**: Ultra-fast response times via an **L1 Moka in-memory cache** paired with an **L2 Redis cache**.
-* 🔄 **Automated CelesTrak Sync Pipeline**: Background discovery worker syncing TLE data sets (e.g. `stations`, `starlink`, `weather`, `visual`) every 6 hours with on-demand trigger endpoints.
-* 📑 **Checkpoint Cursor Pagination**: Deterministic, opaque base64 checkpoint tokens for high-throughput pagination without missing or duplicated items during active ingest.
-* 📚 **Interactive Swagger UI & OpenAPI Specification**: Auto-generated schema contract hosted at `/swagger-ui` and exposed via OpenAPI 3.0 at `/api-docs/openapi.json`.
-* 🛠️ **Fern-Generated SDKs**: Ergonomic, production-ready SDKs for **TypeScript**, **Python**, **Go**, **Java**, and **Rust** published as GitHub Release packages and generated locally via `fern generate`.
-* 🛡️ **CI Gate & Contract Verification**: Automated GitHub Actions workflow enforcing `cargo test`, `cargo fmt`, Docker container build verification, and `pb33f/openapi-changes` schema contract checks.
-
----
-
-## ⚡ Quickstart
-
-### Prerequisites
-* [Rust](https://www.rust-lang.org/tools/install) (1.80+)
-* (Optional) [Docker](https://www.docker.com/) for container deployment
-* (Optional) [Redis](https://redis.io/) for L2 distributed cache (`REDIS_URL=redis://127.0.0.1:6379`)
-
----
-
-### Running Locally
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/mgwedd/astrea-sda-api.git
-   cd astrea-sda-api
-   ```
-
-2. **Generate your Custom Local RSA 2048-bit Keypair**:
-   Create a unique local RSA keypair in `.keys/` (automatically ignored by git):
-   ```bash
-   ./scripts/setup-keys.sh
-   ```
-
-3. **Generate a Signed RS256 Bearer Token**:
-   Generate an RS256 JWT token using your local RSA private key for testing write endpoints (`POST`, `PATCH`, `DELETE`):
-   ```bash
-   ./scripts/make-jwt.sh admin_user admin
-   ```
-
-4. **Run the API server**:
-   ```bash
-   cargo run
-   ```
-   The server will start at **`http://localhost:8080`** and auto-detect your local `.keys/` keypair.
-
-5. **Explore Interactive Documentation & Test UI**:
-   - Open **[http://localhost:8080/](http://localhost:8080/)** for live Swagger UI testing.
-   - Click the **Authorize** button in Swagger UI and paste your Bearer token.
-   - Open **[http://localhost:8080/docs](http://localhost:8080/docs)** for Redoc interactive API reference.
-   - Run `./scripts/dev-ui.sh` to launch any UI mode (Swagger, Fern Docs, or Static HTML).
-
-6. **Enable Rust-Native Git Pre-Commit Quality Hooks**:
-   Automatically enforce `cargo fmt`, `cargo clippy`, and `cargo test` on every git commit via `cargo-husky` and `.githooks/`:
-   ```bash
-   ./scripts/setup-hooks.sh
-   ```
-
-
----
-
----
-
-### Running with Docker & Build Targets (`Makefile`)
-
-Astrea SDA API provides a 100% open-source, zero-account, zero-configuration local gateway powered by **Caddy** (Apache 2.0). See **[DOCKER.md](DOCKER.md)** for detailed architecture.
-
-#### 1. Local Host Hot-Reload (`make dev-hot`)
-PostgreSQL + Redis + Caddy stack with instant sub-second hot-reload via host `cargo-watch`:
-- ⚡ **HTTPS (Automatic TLS)**: `https://sda.localtest.me:8443` (or `https://localhost:8443`)
-  - Swagger UI : `https://sda.localtest.me:8443/` (or `/swagger-ui/`)
-  - ReDoc Docs : `https://sda.localtest.me:8443/docs`
-  - Direct API : `https://sda.localtest.me:8443/v1/...` (or `/api/v1/...`)
-- 🌐 **HTTP Fallback**: `http://sda.localtest.me:8888` (or `http://localhost:8888`)
-- *(Zero accounts, zero signups, zero `/etc/hosts` editing needed)*
+### 1. One-Step Developer Onboarding
+Clone the repository and initialize local keys, git hooks, and dependencies:
 
 ```bash
-make dev-hot
+git clone https://github.com/mgwedd/astrea-sda-api.git
+cd astrea-sda-api
+make install-dev
 ```
 
-#### 2. Containerized Local Dev (`make dev`)
-Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts and Caddy:
+### 2. Launch Local Environment
+
+Choose your preferred development workflow:
+
+| Workflow | Command | Endpoints | Description |
+| :--- | :--- | :--- | :--- |
+| **Host Hot-Reload** *(Recommended)* | `make dev-hot` | `https://sda.localtest.me:8443` | Sub-second host `cargo-watch` with containerized Postgres, Redis & Caddy TLS gateway. |
+| **Full Container Dev** | `make dev` | `https://sda.localtest.me:8443` | Fully containerized Docker dev stack with live file mounts. |
+| **Native Rust** | `cargo run` | `http://localhost:8080` | Bare-metal local process (in-memory SQLite fallback). |
+| **Local Staging / Prod** | `make prod-run` | `https://sda.localtest.me:8443` | Compiled release container stack with Caddy HTTPS proxy. |
+
+> 💡 **Zero Configuration**: `*.localtest.me` resolves permanently to `127.0.0.1` via public DNS. No `/etc/hosts` edits, accounts, or subscriptions required. Local TLS certificates are managed automatically by Caddy.
+
+### 3. Verify with cURL
 
 ```bash
-make dev
-```
-
-#### 3. Local Production Multi-Container Stack (`make prod-run`)
-Runs the compiled production container image locally with PostgreSQL, Redis, and Caddy:
-
-```bash
-make prod-run
-```
-
-#### 4. Production Container Image Build (`make prod`)
-Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
-
-```bash
-make prod
-```
-
-
-
-
----
-
-## ⚙️ Configuration
-
-Set environment variables to customize runtime behavior:
-
-| Environment Variable | Default | Description |
-| :--- | :--- | :--- |
-| `HOST` | `0.0.0.0` | Bind host address |
-| `PORT` | `8080` | Listening HTTP port |
-| `RSA_PRIVATE_KEY` | *(none)* | Direct PEM string of RSA 2048 private key for signing RS256 JWT tokens |
-| `RSA_PUBLIC_KEY` | *(none)* | Direct PEM string of RSA 2048 public key for verifying RS256 JWT tokens |
-| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | Path to RSA private key PEM file |
-| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
-| `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
-| `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
-
-
-
-
-
----
-
-## 🛰️ Explore the API Endpoints
-
-[![Interactive OpenAPI Docs](https://img.shields.io/badge/Interactive_OpenAPI_Docs-GitHub_Pages-blue?style=for-the-badge&logo=openapi-initiative&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/)
-[![OpenAPI 3.0 Spec](https://img.shields.io/badge/OpenAPI_3.0_Spec-JSON-green?style=for-the-badge&logo=json&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/openapi.json)
-
-The complete interactive specification, request playgrounds, and schema contracts are hosted on **[GitHub Pages](https://mgwedd.github.io/astrea-sda-api/)**.
-
----
-
-## 🌐 Interactive UI & API Explorer
-
-The repository provides **three easy ways** to spin up and test the autogenerated UI from OpenAPI:
-
-### Option 1: Embedded Live Axum UI (Swagger UI & Redoc)
-Spin up the API server:
-```bash
-cargo run
-```
-Then open in your browser:
-* 🛠️ **Swagger UI Interactive Playground**: [`http://localhost:8080/`](http://localhost:8080/) or [`http://localhost:8080/swagger-ui`](http://localhost:8080/swagger-ui)
-* 📄 **Redoc Interactive API Documentation**: [`http://localhost:8080/docs`](http://localhost:8080/docs)
-* 📋 **Raw OpenAPI Spec (JSON)**: [`http://localhost:8080/api-docs/openapi.json`](http://localhost:8080/api-docs/openapi.json)
-
-### Option 2: Fern Interactive Docs Dev Server
-Launch Fern's live documentation portal with interactive request playground and multi-language SDK code snippets (TypeScript, Python, Go, Java, Rust):
-```bash
-fern docs dev
-# or using npx:
-npx fern docs dev
-```
-
-### Option 3: Static HTML UI & Interactive Script Launcher
-Use the interactive dev launcher script:
-```bash
-./scripts/dev-ui.sh
-```
-Or open the autogenerated offline static UI bundle directly in any browser:
-```bash
-open api-docs/index.html
-```
-
----
-
-
-## 🧪 Usage Examples
-
-### 1. List Satellites (Paginated)
-```bash
+# Query the 5 nearest tracked satellites
 curl -s "https://sda.localtest.me:8443/v1/satellites?limit=5" | jq
+
+# Find the satellite highest overhead in San Francisco right now
+curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
-### 2. Generate 3D Ground Track & GeoJSON Trajectory
-```bash
-curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
-```
+---
 
-### 3. Find Overhead Satellites for Observer Location
-Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
+## 🌐 Interactive Docs & API Explorer
+
+| Interface | URL | Description |
+| :--- | :--- | :--- |
+| 🛠️ **Swagger UI** | [`https://sda.localtest.me:8443/`](https://sda.localtest.me:8443/) *(or `/swagger-ui`)* | Live, interactive OpenAPI request sandbox with Bearer auth. |
+| 📄 **ReDoc Reference** | [`https://sda.localtest.me:8443/docs`](https://sda.localtest.me:8443/docs) | Clean, searchable reference documentation. |
+| 📋 **OpenAPI JSON** | [`https://sda.localtest.me:8443/api-docs/openapi.json`](https://sda.localtest.me:8443/api-docs/openapi.json) | Raw OpenAPI 3.0 contract for code generators and linters. |
+| 🌿 **Fern Dev Portal** | `npx fern docs dev` | Multi-language SDK documentation with dynamic snippets. |
+
+---
+
+## 🚀 Key Capabilities
+
+* ⚡ **Sub-Millisecond SGP4 Engine**: High-performance astrodynamics built on Axum 0.7, Tokio, and SGP4 with Rayon multi-core CPU parallelism.
+* 📍 **Pass & Visibility Predictions**: Topocentric look angles (Azimuth, Elevation, Range, Range Rate), Doppler shift, and AOS/LOS next-visible window calculations.
+* 🌍 **3D Ground Tracks & CZML**: Generate 3D satellite trajectories, GeoJSON feature collections, and Cesium-compatible CZML streams.
+* 🛰️ **Maneuver Reconstruction**: Detect orbital maneuvers and station-keeping delta-V burns via mean-motion and semimajor-axis residual drift across TLE epochs.
+* 🏎️ **Tiered L1/L2 Caching**: Sub-millisecond response caching using an in-memory Moka L1 cache paired with a distributed Redis L2 cache and single-flight coalescing.
+* 🛡️ **Distributed Rate Limiting**: Redis-backed Sliding Window Counter and Token Bucket algorithms enforcing RFC 6585 HTTP 429 quotas.
+* 🔄 **Automated CelesTrak Ingestion**: Background worker syncing active satellite constellations (`stations`, `starlink`, `weather`, `visual`) every 6 hours with 500-record batch transactions.
+* 🔐 **Defense-Grade Authentication**: Dynamic RS256 JWT tokens, RFC 7523 M2M Private Key JWT client assertions, and RFC 8705 mTLS certificate-bound tokens.
+
+---
+
+## 🧪 Example API Queries
+
+### 1. Find Overhead Satellites
 ```bash
 curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
-### 4. Compute Next Visible Pass for Satellite
+### 2. Generate 90-Minute 3D GeoJSON Ground Track
+```bash
+curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+```
+
+### 3. Compute Next Visible Pass
 ```bash
 curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```
 
-### 5. Trigger Manual CelesTrak Sync
-Sync space station TLE data:
+### 4. Authenticate & Issue Scoped Bearer Token
 ```bash
-curl -X POST "https://sda.localtest.me:8443/v1/pipelines/sync?group=stations" | jq
-```
+# Generate a local test token for admin operations
+./scripts/make-jwt.sh operator_user admin
 
----
-
-## 🔐 Comprehensive Authentication Architecture & M2M Security
-
-Astrea SDA API features a modular, enterprise-grade authentication system supporting dynamic developer credentials, Machine-to-Machine (M2M) private key assertions, and Mutual TLS (mTLS) certificate-bound access tokens.
-
-```
-                  ┌─────────────────────────────────────────────────────────┐
-                  │                 AUTHENTICATION ARCHITECTURE             │
-                  └─────────────────────────────────────────────────────────┘
-                                               │
-       ┌───────────────────────────────────────┼───────────────────────────────────────┐
-       ▼                                       ▼                                       ▼
-┌──────────────┐                       ┌──────────────┐                        ┌──────────────┐
-│  Developer   │                       │   M2M PK     │                        │ RFC 8705 mTLS│
-│ Dynamic Auth │                       │    JWTCA     │                        │ Cert-Bound   │
-└──────────────┘                       └──────────────┘                        └──────────────┘
-  POST /v1/auth/login                    POST /v1/auth/token                     POST /v1/auth/token
-  (No stored passwords)                  (RFC 7523 Private Key)                  (x5t#S256 Binding)
-```
-
-### 1. Dynamic Authentication (Password-Free SDK Initializers)
-SDK clients authenticate dynamically via `/v1/auth/login` or `/v1/auth/signup` to obtain short-lived RS256 Bearer JWT tokens. No static passwords or long-lived API keys are baked into client environments or code repositories.
-
-### 2. RFC 7523 M2M Private Key JWT Client Assertion (`POST /v1/auth/token`)
-For automated background services, microservices, and satellite ingest pipelines, Astrea SDA API supports RFC 7523 Machine-to-Machine authentication. Services sign a client assertion payload with their private RSA key and exchange it for a scoped Bearer token without transmitting static shared secrets:
-
-```bash
+# Or exchange an RFC 7523 M2M client assertion
 curl -X POST "https://sda.localtest.me:8443/v1/auth/token" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,163 +103,96 @@ curl -X POST "https://sda.localtest.me:8443/v1/auth/token" \
   }'
 ```
 
-### 3. RFC 8705 Mutual TLS (mTLS) Certificate-Bound Tokens (`cnf` Claim)
-For ultra-secure defense and aerospace infrastructure, tokens issued during client assertion token exchange can be bound to the caller's client X.509 certificate SHA-256 fingerprint (`cnf.x5t#S256`).
-- Supplying the `X-Client-Cert-Fingerprint` (or `X-Client-Cert-Hash`) header during token exchange embeds a `cnf` claim in the issued JWT.
-- Every subsequent request using a certificate-bound token **must** present the matching client certificate fingerprint header. Stolen Bearer tokens are completely unusable without the matching TLS certificate.
+---
+
+## 🛠️ Developer Make Targets
+
+| Target | Command | Purpose |
+| :--- | :--- | :--- |
+| **Hot-Reload Dev** | `make dev-hot` | Postgres + Redis + Caddy with host `cargo-watch` (instant compilation). |
+| **Container Dev** | `make dev` | Full containerized dev stack with live code mounts. |
+| **Local Staging** | `make prod-run` | Run compiled production release image locally with Caddy gateway. |
+| **Build Prod Image** | `make prod` | Build optimized, unprivileged production container (`astrea-sda-api:latest`). |
+| **Run Tests** | `make test` | Execute the full test suite offline (`cargo test --offline`). |
+| **Lint & Format** | `make lint && make fmt` | Enforce zero-warning Clippy checks and standard Rust formatting. |
+| **Verify OpenAPI** | `make openapi` | Verify OpenAPI schema contract backwards-compatibility. |
+| **Generate SDKs** | `make sdk` | Generate TypeScript, Python, Go, Java, and Rust SDKs via Fern. |
+| **Show Endpoints** | `make urls` | Print all active gateway URLs and container ports. |
+| **Stop Containers** | `make stop` | Tear down all dev, dev-hot, and prod containers. |
+
+---
+
+## ⚙️ Configuration Reference
+
+Customize runtime behavior via `.env` or container environment variables:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `HOST` | `0.0.0.0` | Bind host address. |
+| `PORT` | `8080` | Listening HTTP port. |
+| `POSTGRES_URI` | *(none / SQLite)* | PostgreSQL connection string (`postgres://user:pass@host:5432/db`). |
+| `REDIS_URL` | *(none / in-memory)* | Redis connection string (`redis://127.0.0.1:6379`) for L2 cache & rate limits. |
+| `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak TLE ingestion worker. |
+| `MAX_EXPRESS_CORES` | `4` | Rayon thread pool cap for express compute jobs (<5s). |
+| `MAX_HEAVY_CORES` | `8` | Rayon thread pool cap for heavy conjunction scans. |
+| `RATE_LIMIT_ALGORITHM` | `sliding_window` | Rate limiter algorithm (`sliding_window`, `token_bucket`, `noop`). |
+| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | Path to RSA private key for RS256 token signing. |
+| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key for RS256 token verification. |
 
 ---
 
 ## 📦 Client SDKs
 
-Ergonomic SDKs for **TypeScript**, **Python**, **Go**, **Java**, and **Rust** are generated automatically from the OpenAPI specification using [Fern](https://buildwithfern.com/).
-
-### 🔑 Dynamic Auth & Ergonomic SDK Initialization
-
-In production applications, client applications authenticate dynamically at startup via your Auth Provider (`/v1/auth/login` endpoint or Supabase Auth SDK) to retrieve an authenticated JWT token, or use M2M Private Key assertions, then instantiate the SDK client:
-
-**TypeScript / Node.js**:
-```typescript
-import { AstreaSdaApiClient } from "./sdks/typescript";
-
-// 1. Authenticate at application startup via Auth Provider
-const authResponse = await fetch("https://sda.localtest.me:8443/v1/auth/login", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ email: "operator@example.com", password: process.env.OPERATOR_PASSWORD })
-}).then(res => res.json());
-
-// 2. Initialize SDK client with the dynamically acquired JWT Bearer token (or M2M assertion token)
-const client = new AstreaSdaApiClient({
-  token: authResponse.token,
-  environment: "https://sda.localtest.me:8443"
-});
-
-// 3. Execute authenticated operations
-await client.satellites.createSatellite({
-  name: "ISS (ZARYA)",
-  tleLineOne: "1 25544U 98067A...",
-  tleLineTwo: "2 25544  51.6461..."
-});
-```
-
-**Python**:
-```python
-import os
-import requests
-from sdks.python import AstreaSdaApiClient
-
-# 1. Authenticate at application startup via Auth Provider
-auth_response = requests.post(
-    "https://sda.localtest.me:8443/v1/auth/login",
-    json={"email": "operator@example.com", "password": os.environ["OPERATOR_PASSWORD"]}
-).json()
-
-# 2. Initialize SDK client with the dynamically acquired JWT Bearer token
-client = AstreaSdaApiClient(
-    token=auth_response["token"],
-    base_url="https://sda.localtest.me:8443"
-)
-
-# 3. Execute authenticated operations
-client.satellites.create_satellite(
-    name="ISS (ZARYA)",
-    tle_line_one="1 25544U 98067A...",
-    tle_line_two="2 25544  51.6461..."
-)
-```
-
-**Go**:
-```go
-package main
-
-import (
-    "bytes"
-    "encoding/json"
-    "net/http"
-    "os"
-    "sdks/go/client"
-)
-
-func main() {
-    // 1. Authenticate via Auth Provider endpoint /v1/auth/login or Supabase Auth
-    payload, _ := json.Marshal(map[string]string{
-        "email":    "operator@example.com",
-        "password": os.Getenv("OPERATOR_PASSWORD"),
-    })
-    resp, _ := http.Post("https://sda.localtest.me:8443/v1/auth/login", "application/json", bytes.NewBuffer(payload))
-    var authResp struct {
-        Token string `json:"token"`
-    }
-    json.NewDecoder(resp.Body).Decode(&authResp)
-
-    // 2. Initialize SDK client with dynamically acquired JWT token
-    sdk := client.NewClient(
-        client.WithToken(authResp.Token),
-        client.WithBaseURL("https://sda.localtest.me:8443"),
-    )
-}
-```
-
-**Rust**:
-```rust
-use astrea_sda_api_sdk::AstreaSdaApiClient;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = AstreaSdaApiClient::builder()
-        .base_url("https://sda.localtest.me:8443")
-        .bearer_token(std::env::var("ASTREA_BEARER_TOKEN")?)
-        .build()?;
-    Ok(())
-}
-```
-
-> 💡 **Local Dev Note**: For local CLI script testing and manual curl calls during development, you can generate a test token using `./scripts/make-jwt.sh operator_user operator`. Production applications should always authenticate dynamically via Auth Providers at startup.
-
-* **CI Release Assets**: Official SDK release packages (`astrea-sda-api-sdk-typescript.tar.gz`, `astrea-sda-api-sdk-python.tar.gz`, `astrea-sda-api-sdk-go.tar.gz`, `astrea-sda-api-sdk-java.tar.gz`, `astrea-sda-api-sdk-rust.tar.gz`) are compiled and published automatically on the [GitHub Releases](../../releases) page whenever a release tag (`v*`) is pushed.
-* **Local SDK Generation**: To generate SDKs locally for testing:
-  ```bash
-  npm install -g fern-api
-  fern generate
-  ```
-  Generated SDK files will output to the local un-tracked `sdks/` directory.
-
----
-
-
-## 🧪 Testing & Verification
-
-Run the comprehensive test suite (unit tests, integration tests, contract tests, cache tests):
+Production-ready SDKs are generated directly from the OpenAPI schema using [Fern](https://buildwithfern.com/):
 
 ```bash
-# Run all tests
-cargo test --offline
+# Generate SDKs locally for testing
+make sdk
+# Or target individual languages:
+make sdk-ts && make sdk-py && make sdk-go && make sdk-rust
+```
 
-# Verify code formatting
-cargo fmt --check
+```typescript
+// TypeScript SDK Quickstart
+import { AstreaSdaApiClient } from "./sdks/typescript";
 
-# Test OpenAPI contract stability
-cargo test --test openapi_contract_tests
+const client = new AstreaSdaApiClient({
+  environment: "https://sda.localtest.me:8443",
+  token: process.env.ASTREA_BEARER_TOKEN
+});
+
+const satellites = await client.satellites.listSatellites({ limit: 10 });
+```
+
+```python
+# Python SDK Quickstart
+from sdks.python import AstreaSdaApiClient
+
+client = AstreaSdaApiClient(
+    base_url="https://sda.localtest.me:8443",
+    token=os.environ["ASTREA_BEARER_TOKEN"]
+)
+
+satellites = client.satellites.list_satellites(limit=10)
 ```
 
 ---
 
-## 🤝 Contributing & Community
+## 🤝 Contributing & Quality Standards
 
-We welcome open-source contributions! Please review our community standards before opening a PR:
-- 📖 [**Contributing Guidelines**](CONTRIBUTING.md) — Proof-First engineering, breaking changes & coding agent standards.
+We welcome open-source contributions! Please review our standards before submitting a PR:
+- 📖 [**Contributing Guidelines**](CONTRIBUTING.md) — Proof-First engineering and pull request criteria.
+- 🐳 [**Docker Architecture Guide**](DOCKER.md) — Multi-container networking, Caddy TLS gateway, and cloud LB separation.
+- 🤖 [**Agentic Coding Guidelines**](AGENTS.md) — Operational directives and verification gates for AI pair programmers.
 - 📜 [**Code of Conduct**](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1 standards.
-- 🔒 [**Security Policy**](SECURITY.md) — Vulnerability reporting & security practices.
+- 🔒 [**Security Policy**](SECURITY.md) — Responsible vulnerability disclosure.
 
 ---
 
 ## 📄 License
 
-Licensed under either of:
-
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+Dual-licensed under either:
+* **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* **MIT License** ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
-
