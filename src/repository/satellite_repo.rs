@@ -5,7 +5,7 @@ use crate::pagination::{
     CheckpointCursor, IdentifiableCheckpoint, PaginatedResponse, PaginationMeta, PaginationQuery,
 };
 use crate::repository::data_provider::{
-    DataProvider, MemoryDataProvider, SupabasePostgresDataProvider,
+    DataProvider, MemoryDataProvider, PostgresDataProvider, SupabaseDataProvider,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,25 +21,35 @@ impl SatelliteRepository {
     pub async fn new(redis_url: Option<&str>) -> Self {
         let cache = TieredCache::new(redis_url, Duration::from_secs(300)).await;
 
+        let provider: Arc<dyn DataProvider> = if let (Ok(s_url), Ok(s_key)) = (
+            std::env::var("SUPABASE_URL"),
+            std::env::var("SUPABASE_ANON_KEY"),
+        ) {
+            if !s_url.trim().is_empty() && !s_key.trim().is_empty() {
+                Arc::new(SupabaseDataProvider::new(s_url, s_key))
+            } else {
+                Self::connect_postgres().await
+            }
+        } else {
+            Self::connect_postgres().await
+        };
+
+        Self { provider, cache }
+    }
+
+    async fn connect_postgres() -> Arc<dyn DataProvider> {
         let db_url = std::env::var("POSTGRES_URI")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .ok();
 
-        let provider: Arc<dyn DataProvider> = if let Some(url) = db_url {
+        if let Some(url) = db_url {
             if !url.trim().is_empty() {
-                if let Ok(pg) = SupabasePostgresDataProvider::connect(&url).await {
-                    Arc::new(pg)
-                } else {
-                    Arc::new(MemoryDataProvider::new())
+                if let Ok(pg) = PostgresDataProvider::connect(&url).await {
+                    return Arc::new(pg);
                 }
-            } else {
-                Arc::new(MemoryDataProvider::new())
             }
-        } else {
-            Arc::new(MemoryDataProvider::new())
-        };
-
-        Self { provider, cache }
+        }
+        Arc::new(MemoryDataProvider::new())
     }
 
     pub fn with_provider(provider: Arc<dyn DataProvider>, cache: TieredCache) -> Self {
