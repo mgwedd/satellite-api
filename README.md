@@ -75,36 +75,29 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ---
 
-### Running with Docker & Docker Compose
+### Running with Docker & Build Targets (`Makefile`)
 
-Astrea SDA API provides 3 clear containerization options. See **[DOCKER.md](DOCKER.md)** for detailed container architecture and deployment options.
+Astrea SDA API provides 3 simple build commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
 
-#### Option 1: One-Command Single Stack Deployment ("Just Works")
-Spins up PostgreSQL 16, Redis 7, Astrea API (with automated schema migrations), and Nginx reverse proxy using Docker DNS networking (`astrea-net`):
-
-```bash
-# Launch full stack in background
-docker compose up -d
-
-# Or via script:
-./scripts/docker-prod.sh
-```
-- **Gateway (Nginx)**: `http://localhost:8888`
-- **API Endpoint**: `http://localhost:8880`
-- **Swagger UI**: `http://localhost:8880/swagger-ui`
-
-#### Option 2: Containerized Local Dev with Hot-Reloading (`cargo watch`)
-Runs source files inside a container with live hot-reloading on code edits:
+#### 1. Local Host Hot-Reload (`make build dev-hot`)
+Docker DNS/Nginx/Postgres/Redis stack routing custom domain requests (`https://astrealabs.local.com/sda/api/v1`) directly to your locally running host `cargo-watch` process for instant code reloads:
 
 ```bash
-./scripts/docker-dev.sh
+make build dev-hot
 ```
 
-#### Option 3: Production Image Container Build
-Builds an optimized, unprivileged production container (`astrea-sda-api:latest`) with multi-stage build testing:
+#### 2. Containerized Local Dev (`make build dev`)
+Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts:
 
 ```bash
-./scripts/docker-build.sh
+make build dev
+```
+
+#### 3. Production Deployable Image (`make build prod`)
+Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
+
+```bash
+make build prod
 ```
 
 ---

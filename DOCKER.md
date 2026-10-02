@@ -35,59 +35,63 @@ The multi-container stack uses **Docker DNS Resolution** and an internal bridge 
 
 ---
 
-## 🚀 Quickstarts & Deployment Options
+## 🚀 Simplified Build & Container Targets (`Makefile`)
 
-### Option 1: One-Command Local Stack ("Just Works")
-
-Spins up PostgreSQL 16, Redis 7, Astrea API (with automated DB schema migrations), and Nginx reverse proxy using Docker Compose:
+Astrea SDA API provides 3 simple build commands depending on your workflow:
 
 ```bash
-# Launch entire production stack in background
-docker compose up -d
+# 1. Local host hot-reload (Docker DNS + Postgres + Redis + Nginx routing to host cargo-watch instance)
+make build dev-hot
 
-# Or use the convenience script:
-./scripts/docker-prod.sh
+# 2. Fully containerized local dev stack (cargo-watch running inside Docker)
+make build dev
+
+# 3. Optimized production deployable container image
+make build prod
+```
+
+---
+
+### Option 1: Local Host Hot-Reload (`make build dev-hot`)
+
+Spins up PostgreSQL, Redis, and Nginx in Docker while running your Rust application locally on your host machine via `cargo-watch`. Nginx uses Docker DNS (`host.docker.internal`) to proxy custom domain requests directly to your host process for sub-second hot reloading without container compilation delays:
+
+```bash
+make build dev-hot
 ```
 
 - **HTTPS Custom Domain Gateway**: `https://astrealabs.local.com/sda/api/v1` (or `https://localhost:8443/sda/api/v1`)
 - **HTTP Gateway**: `http://localhost:8888`
-- **Direct API Server**: `http://localhost:8880`
-- **Swagger UI Playground**: `http://localhost:8880/swagger-ui`
-- **Health Check**: `curl -k -f https://localhost:8443/nginx-health`
+- **PostgreSQL**: `localhost:5432`
+- **Redis**: `localhost:6379`
 
 > 💡 **Custom Local Domain Setup (`astrealabs.local.com`)**:
-> To test custom domain routing locally, add `127.0.0.1 astrealabs.local.com` to your `/etc/hosts` file. Nginx automatically terminates TLS using the self-signed certificate in `.keys/dev-tls.crt` and routes `/sda/api/v1` to the underlying API container.
+> Add `127.0.0.1 astrealabs.local.com` to your `/etc/hosts` file. Nginx terminates TLS using the auto-generated certificate in `.keys/dev-tls.crt` and forwards `/sda/api/v1` to your locally running host process.
 
 ---
 
-### Option 2: Containerized Dev with Hot-Reloading (`cargo watch`)
+### Option 2: Containerized Local Dev (`make build dev`)
 
-Runs source files inside a containerized Rust environment with live hot-reloading when editing code:
+Runs the full application stack inside Docker containers using `cargo-watch` with source file volume mounts:
 
 ```bash
-./scripts/docker-dev.sh
-
-# Or directly using Docker Compose dev spec:
-docker compose -f docker-compose.dev.yml up --build
+make build dev
 ```
 
 - **Live Source Mount**: Host repository directory (`.`) mounted to `/app`
 - **Compilation Caching**: Named volumes for `cargo_cache` and `target_cache`
 - **PostgreSQL Port**: `localhost:5433`
 - **Redis Port**: `localhost:6380`
-- **API Dev Endpoint**: `http://localhost:8880`
+- **API Dev Direct**: `http://localhost:8880`
 
 ---
 
-### Option 3: Production Image Container Build
+### Option 3: Production Image Container Build (`make build prod`)
 
-Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with multi-stage build testing:
+Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
 
 ```bash
-./scripts/docker-build.sh
-
-# Or directly:
-docker build -t astrea-sda-api:latest -f Dockerfile .
+make build prod
 ```
 
 ---
