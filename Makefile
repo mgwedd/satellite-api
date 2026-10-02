@@ -7,7 +7,7 @@ ROLE ?= admin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev-hot dev prod prod-run prod-up check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod tailscale-status tailscale-login tailscale-urls tailscale-ping
+.PHONY: help build dev-hot dev prod prod-run prod-up check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod urls
 
 help: ## Display this self-documenting developer help menu
 	@echo "=============================================================================="
@@ -23,13 +23,13 @@ build: ## Build production container image (alias for make prod)
 		./scripts/docker-build.sh; \
 	fi
 
-dev-hot: ## Run host app + Docker dev stack (Postgres + Redis + Tailscale + Nginx) with sub-second hot-reload
+dev-hot: ## Run host app + Docker dev stack (Postgres + Redis + Caddy) with sub-second hot-reload
 	@./scripts/docker-dev-hot.sh
 
-dev: ## Run containerized local dev stack (cargo-watch + Postgres + Redis + Tailscale + Nginx)
+dev: ## Run containerized local dev stack (cargo-watch + Postgres + Redis + Caddy)
 	@./scripts/docker-dev.sh
 
-prod-run: ## Run production multi-container stack locally (api + Postgres + Redis + Tailscale + Nginx)
+prod-run: ## Run production multi-container stack locally (api + Postgres + Redis + Caddy)
 	@./scripts/docker-prod.sh
 
 prod-up: prod-run ## Alias for make prod-run
@@ -40,6 +40,7 @@ prod: ## Build optimized production container image with build verification test
 build-dev-hot: dev-hot
 build-dev: dev
 build-prod: prod
+
 
 
 ##@ Installation & Setup
@@ -149,22 +150,22 @@ sdk-rust: ## Generate Rust SDK
 		npx fern generate --group rust; \
 	fi
 
-##@ Docker Operations & Tailscale
+##@ Docker Operations & Gateway
 logs: ## Stream Docker container logs
 	docker compose logs -f
 
-tailscale-status: ## Check Tailscale gateway connection and MagicDNS status
-	@./scripts/tailscale.sh status
-
-tailscale-login: ## Print Tailscale interactive authentication login link
-	@./scripts/tailscale.sh login
-
-tailscale-urls: ## Display all accessible URLs across active stacks
-	@./scripts/tailscale.sh urls
-
-tailscale-ping: ## Test HTTPS connectivity to https://sda/
-	@./scripts/tailscale.sh ping
-
+urls: ## Print all accessible Caddy HTTPS and HTTP URLs
+	@echo "=========================================================="
+	@echo "⚡ Astrea SDA API - Caddy Gateway Endpoints"
+	@echo "=========================================================="
+	@echo "   - HTTPS (Automatic TLS) : https://sda.localtest.me:8443 (or https://localhost:8443)"
+	@echo "   - Interactive Swagger UI: https://sda.localtest.me:8443/ (or /swagger-ui/)"
+	@echo "   - ReDoc Interactive Docs: https://sda.localtest.me:8443/docs"
+	@echo "   - Direct API Endpoints  : https://sda.localtest.me:8443/v1/... (or /api/v1/...)"
+	@echo "   - HTTP Local Gateway    : http://sda.localtest.me:8888 (or http://localhost:8888)"
+	@echo "   - Direct Container Port : http://localhost:8880"
+	@echo "   (Zero accounts, zero signups, zero /etc/hosts edits required)"
+	@echo "=========================================================="
 
 stop: ## Stop all running Docker containers across environments
 	-docker compose down
@@ -173,4 +174,5 @@ stop: ## Stop all running Docker containers across environments
 
 clean: stop ## Stop Docker containers and clean target build directory
 	cargo clean
+
 

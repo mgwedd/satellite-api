@@ -46,46 +46,21 @@ services:
       retries: 5
 
   # ============================================================================
-  # Tailscale OSS Gateway (Main Dev Ingress - Zero /etc/hosts, Automatic TLS)
+  # Caddy Gateway (100% OSS Reverse Proxy with Automatic Local HTTPS)
   # ============================================================================
-  tailscale:
-    image: tailscale/tailscale:stable
-    container_name: astrea-dev-hot-tailscale
-    restart: unless-stopped
-    environment:
-      - TS_AUTHKEY=${TS_AUTHKEY:-}
-      - TS_HOSTNAME=${TS_HOSTNAME:-sda}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_SERVE_CONFIG=/config/serve-hot.json
-      - TS_USERSPACE=true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - tailscale_dev_hot_data:/var/lib/tailscale
-      - ./tailscale:/config:ro
-    networks:
-      - astrea-dev-hot-net
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  # ============================================================================
-  # Nginx Reverse Proxy (DIY / Local Experimentation: astrealabs.local.com)
-  # ============================================================================
-  nginx:
-    image: nginx:alpine
-    container_name: astrea-dev-hot-nginx
+  caddy:
+    image: caddy:2-alpine
+    container_name: astrea-dev-hot-caddy
     restart: unless-stopped
     ports:
-      - "8888:80"
-      - "8443:443"
+      - "8888:8888"
+      - "8443:8443"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./nginx/nginx.conf.dev-hot:/etc/nginx/nginx.conf:ro
-      - ./.keys:/etc/nginx/certs:ro
+      - ./caddy/Caddyfile.dev-hot:/etc/caddy/Caddyfile:ro
+      - caddy_dev_hot_data:/data
+      - caddy_dev_hot_config:/config
     networks:
       - astrea-dev-hot-net
     depends_on:
@@ -104,6 +79,9 @@ volumes:
     name: astrea_postgres_dev_hot_data
   redis_dev_hot_data:
     name: astrea_redis_dev_hot_data
-  tailscale_dev_hot_data:
-    name: astrea_tailscale_dev_hot_data
+  caddy_dev_hot_data:
+    name: astrea_caddy_dev_hot_data
+  caddy_dev_hot_config:
+    name: astrea_caddy_dev_hot_config
+
 

@@ -79,40 +79,19 @@ services:
         condition: service_healthy
 
   # ============================================================================
-  # Tailscale OSS Gateway (Main Dev Ingress - Zero /etc/hosts, Automatic TLS)
+  # Caddy Gateway (100% OSS Reverse Proxy with Automatic Local HTTPS)
   # ============================================================================
-  tailscale:
-    image: tailscale/tailscale:stable
-    container_name: astrea-dev-tailscale
-    restart: unless-stopped
-    environment:
-      - TS_AUTHKEY=${TS_AUTHKEY:-}
-      - TS_HOSTNAME=${TS_HOSTNAME:-sda}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_SERVE_CONFIG=/config/serve-dev.json
-      - TS_USERSPACE=true
-
-    volumes:
-      - tailscale_dev_data:/var/lib/tailscale
-      - ./tailscale:/config:ro
-    networks:
-      - astrea-dev-net
-    depends_on:
-      - api-dev
-
-  # ============================================================================
-  # Nginx Gateway (DIY / Local Experimentation Proxy)
-  # ============================================================================
-  nginx:
-    image: nginx:alpine
-    container_name: astrea-dev-nginx
+  caddy:
+    image: caddy:2-alpine
+    container_name: astrea-dev-caddy
     restart: unless-stopped
     ports:
-      - "8888:80"
-      - "8443:443"
+      - "8888:8888"
+      - "8443:8443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./.keys:/etc/nginx/certs:ro
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dev_data:/data
+      - caddy_dev_config:/config
     networks:
       - astrea-dev-net
     depends_on:
@@ -132,6 +111,9 @@ volumes:
     name: astrea_cargo_cache
   target_cache:
     name: astrea_target_cache
-  tailscale_dev_data:
-    name: astrea_tailscale_dev_data
+  caddy_dev_data:
+    name: astrea_caddy_dev_data
+  caddy_dev_config:
+    name: astrea_caddy_dev_config
+
 

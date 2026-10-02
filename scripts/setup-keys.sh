@@ -7,8 +7,6 @@ cd "$DIR"
 KEYS_DIR="$DIR/.keys"
 PRIV_KEY="$KEYS_DIR/rsa_private.pem"
 PUB_KEY="$KEYS_DIR/rsa_public.pem"
-TLS_KEY="$KEYS_DIR/dev-tls.key"
-TLS_CRT="$KEYS_DIR/dev-tls.crt"
 
 mkdir -p "$KEYS_DIR"
 
@@ -18,44 +16,18 @@ if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
   echo "📄 Initialized .env configuration file from .env.example"
 fi
 
-check_tailscale_auth() {
-  local authkey=""
-  if [ -n "$TS_AUTHKEY" ]; then
-    authkey="$TS_AUTHKEY"
-  elif [ -f "$DIR/.env" ]; then
-    authkey=$(grep -E '^TS_AUTHKEY=[^[:space:]]+' "$DIR/.env" | cut -d'=' -f2- || true)
-  fi
-
-  if [ -n "$authkey" ]; then
-    echo "🌐 Tailscale: Auth key configured (zero-config HTTPS enabled)"
-  else
-    echo "🌐 Tailscale: TS_AUTHKEY not set in .env."
-    echo "   - Option A: Add a free key to .env (https://login.tailscale.com/admin/settings/keys) for instant zero-touch join."
-    echo "   - Option B: Leave blank and approve via one-time browser link on first start (run 'make tailscale-login')."
-  fi
-}
-
-
-if [[ -f "$PRIV_KEY" && -f "$PUB_KEY" && -f "$TLS_KEY" && -f "$TLS_CRT" && "$1" != "--force" ]]; then
-  echo "🔑 Local RSA keypair & TLS certificates already exist in .keys/"
-  check_tailscale_auth
+if [[ -f "$PRIV_KEY" && -f "$PUB_KEY" && "$1" != "--force" ]]; then
+  echo "🔑 Local RSA 2048 keypair already exists in .keys/"
   exit 0
 fi
 
-
 echo "=========================================================="
-echo "🔑 Generating custom local 2048-bit RSA keypair & TLS certs..."
+echo "🔑 Generating custom local 2048-bit RSA keypair for JWT auth..."
 echo "=========================================================="
 
 if command -v openssl &> /dev/null; then
   openssl genrsa 2048 2>/dev/null | openssl pkcs8 -topk8 -nocrypt -out "$PRIV_KEY" 2>/dev/null
   openssl rsa -in "$PRIV_KEY" -pubout -out "$PUB_KEY" 2>/dev/null
-
-  # Generate Self-Signed TLS Certificate for astrealabs.local.com & localhost
-  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout "$TLS_KEY" -out "$TLS_CRT" \
-    -subj "/CN=astrealabs.local.com/O=Astrea SDA Local Dev" \
-    -addext "subjectAltName=DNS:astrealabs.local.com,DNS:localhost,IP:127.0.0.1" 2>/dev/null
 else
   python3 -c "
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -80,14 +52,11 @@ with open('$PUB_KEY', 'wb') as f:
 "
 fi
 
-chmod 600 "$PRIV_KEY" "$TLS_KEY"
-chmod 644 "$PUB_KEY" "$TLS_CRT"
+chmod 600 "$PRIV_KEY"
+chmod 644 "$PUB_KEY"
 
-echo "✅ Created local RSA keypair and TLS certificates successfully:"
+echo "✅ Created local RSA keypair successfully:"
 echo "   RSA Private Key : $PRIV_KEY"
 echo "   RSA Public Key  : $PUB_KEY"
-echo "   TLS Certificate : $TLS_CRT"
-echo "   TLS Key         : $TLS_KEY"
-check_tailscale_auth
+echo "   (TLS certificates are automatically managed by Caddy)"
 echo "=========================================================="
-

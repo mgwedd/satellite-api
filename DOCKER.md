@@ -1,33 +1,31 @@
 # 🐳 Astrea SDA API Containerization & Docker Guide
 
-Astrea SDA API provides enterprise-grade containerization with clear separation between **Production Deployments** and **Local Development Environments**.
+Astrea SDA API provides enterprise-grade containerization with a 100% open-source, zero-account, zero-configuration gateway powered by **Caddy** (Apache 2.0).
 
 ---
 
 ## 🏗️ Architecture Overview
 
-The multi-container stack uses **Docker DNS Resolution** and an internal bridge network (`astrea-dev-net`). **No `localhost` hardcoding is used in service-to-service communications.**
+The multi-container stack uses **Docker DNS Resolution** and an internal bridge network (`astrea-dev-net` / `astrea-net`). **No `localhost` hardcoding is used in service-to-service communications.**
 
 ```
                                   ┌─────────────────────────────┐
                                   │      Client / Browser       │
                                   └──────────────┬──────────────┘
                                                  │
-                    ┌────────────────────────────┴────────────────────────────┐
-                    │                                                         │
-                    ▼ (Main Gateway: Automatic TLS, MagicDNS)                 ▼ (DIY / Local Proxy)
-     ┌─────────────────────────────┐                           ┌─────────────────────────────┐
-     │    Tailscale OSS Gateway    │                           │        Nginx Gateway        │
-     │ (tailscale/tailscale:stable)│                           │       (nginx:alpine)        │
-     │      https://sda/           │                           │    https://localhost:8443   │
-     └──────────────┬──────────────┘                           └──────────────┬──────────────┘
-                    │                                                         │
-                    └────────────────────────────┬────────────────────────────┘
+                                                 │ HTTPS :8443 (sda.localtest.me)
+                                                 │ HTTP  :8888 (localhost)
+                                                 ▼
+                                  ┌─────────────────────────────┐
+                                  │    Caddy Gateway (OSS)      │
+                                  │       (caddy:2-alpine)      │
+                                  │   Automatic TLS (Internal)  │
+                                  └──────────────┬──────────────┘
                                                  │
-                                                 ▼ Docker DNS: api-dev:8080 (or host.docker.internal:8080)
+                                                 ▼ Docker DNS: api:8080 (or host.docker.internal:8080)
                                   ┌─────────────────────────────┐
                                   │       Astrea SDA API        │
-                                  │      (rust:1.80-alpine)     │
+                                  │   (Axum 0.7 + SGP4 Engine)  │
                                   └──────┬───────────────┬──────┘
                                          │               │
                      Docker DNS: postgres:5432           │ Docker DNS: redis:6379
@@ -40,18 +38,36 @@ The multi-container stack uses **Docker DNS Resolution** and an internal bridge 
 
 ---
 
-## 🚀 Simplified Build & Container Targets (`Makefile`)
+## ⚡ Why Caddy & `localtest.me`?
 
-Astrea SDA API provides 3 simple build commands depending on your workflow:
+1. **Zero Account Signups & 100% Open Source**: Powered by Caddy (Apache 2.0, Go). No third-party SaaS accounts, no external auth keys, and no subscriptions.
+2. **Zero `/etc/hosts` Configuration**: Uses `sda.localtest.me`. `*.localtest.me` is a globally registered public domain whose DNS records permanently resolve to `127.0.0.1`. It works out of the box for any developer without modifying system files.
+3. **Automatic Local HTTPS**: Caddy's built-in Certificate Authority (`tls internal`) provisions and manages local TLS certificates automatically on the fly.
+4. **Convenient Endpoints**:
+   - `https://sda.localtest.me:8443/` (Redirects to Swagger UI)
+   - `https://sda.localtest.me:8443/docs` (ReDoc Interactive API Reference)
+   - `https://sda.localtest.me:8443/v1/...` (Direct API Endpoints)
+   - `https://sda.localtest.me:8443/sda/api/v1/...` (Subpath prefix alias)
+   - `http://localhost:8888` (HTTP fallback)
+   - `http://localhost:8880` (Direct container port)
+
+---
+
+## 🚀 Build & Container Targets (`Makefile`)
+
+Astrea SDA API provides simple commands depending on your workflow:
 
 ```bash
-# 1. Local host hot-reload (Postgres + Redis + Tailscale + Nginx routing to host cargo-watch instance)
+# 1. Local host hot-reload (Postgres + Redis + Caddy routing to host cargo-watch instance)
 make dev-hot
 
-# 2. Fully containerized local dev stack (cargo-watch running inside Docker with Tailscale)
+# 2. Fully containerized local dev stack (cargo-watch running inside Docker with Caddy)
 make dev
 
-# 3. Optimized production deployable container image
+# 3. Local production multi-container stack (compiled release image + Postgres + Redis + Caddy)
+make prod-run
+
+# 4. Optimized production container image build
 make prod
 ```
 
@@ -59,64 +75,50 @@ make prod
 
 ### Option 1: Local Host Hot-Reload (`make dev-hot`)
 
-Spins up PostgreSQL, Redis, Tailscale OSS gateway, and Nginx in Docker while running your Rust application locally on your host machine via `cargo-watch`. Tailscale uses `serve-hot.json` via Docker DNS (`host.docker.internal`) to proxy requests directly to your host process for sub-second hot reloading without container compilation delays:
+Spins up PostgreSQL, Redis, and Caddy in Docker while running your Rust application locally on your host machine via `cargo-watch`. Caddy uses `Caddyfile.dev-hot` to proxy requests via Docker DNS (`host.docker.internal:8080`) directly to your host process for sub-second hot reloading without container compilation delays:
 
 ```bash
 make dev-hot
 ```
 
-- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Automatic TLS)**:
-  - **Interactive Swagger UI**: `https://sda/`
-  - **ReDoc API Reference**: `https://sda/docs`
-  - **API Endpoints**: `https://sda/v1/...` or `https://sda/api/v1/...`
-  - **Team / Custom Domain Alias**: `https://sda.dev.astrealabs.com/api/v1/...`
-- 🛠️ **DIY Nginx Gateway (Local Only)**:
-  - **HTTPS**: `https://localhost:8443/sda/api/v1`
-  - **HTTP**: `http://localhost:8888`
+- ⚡ **HTTPS Gateway**: `https://sda.localtest.me:8443` (or `https://localhost:8443`)
+- 🌐 **HTTP Gateway**: `http://sda.localtest.me:8888` (or `http://localhost:8888`)
 - 🗄️ **PostgreSQL**: `localhost:5432`
 - 💾 **Redis**: `localhost:6379`
-
-> 💡 **Why Tailscale OSS Gateway?**:
-> Tailscale gives you **real Let's Encrypt TLS certificates** and **instant MagicDNS resolution** (`https://sda/`). No self-signed certificate warnings, no `-k` / `--insecure` in `curl`, and **no `/etc/hosts` editing**. Teammates on your tailnet can access your local running dev environment directly.
 
 ---
 
 ### Option 2: Containerized Local Dev (`make dev`)
 
-Runs the full application stack inside Docker containers using `cargo-watch` with source file volume mounts and the Tailscale OSS gateway:
+Runs the full application stack inside Docker containers using `cargo-watch` with source file volume mounts and Caddy:
 
 ```bash
 make dev
 ```
 
-- 🌐 **Main Gateway**: `https://sda/` or `https://sda.dev.astrealabs.com/api/v1/...`
-- 🛠️ **DIY Nginx**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
-- ⚡ **Direct Container Dev API**: `http://localhost:8880`
+- ⚡ **HTTPS Gateway**: `https://sda.localtest.me:8443`
+- 🌐 **HTTP Gateway**: `http://localhost:8888`
+- ⚡ **Direct Container Port**: `http://localhost:8880`
 - 🗄️ **PostgreSQL Port**: `localhost:5433`
 - 💾 **Redis Port**: `localhost:6380`
 - **Live Source Mount**: Host repository directory (`.`) mounted to `/app`
 - **Compilation Caching**: Named volumes for `cargo_cache` and `target_cache`
 
-
 ---
 
 ### Option 3: Local Production Multi-Container Stack (`make prod-run`)
 
-Runs the compiled production container image locally alongside PostgreSQL, Redis, Tailscale OSS gateway, and Nginx reverse proxy to test the production build in a staging-equivalent environment before deployment:
+Runs the compiled production container image locally alongside PostgreSQL, Redis, and Caddy to test the production build in a staging-equivalent environment before deployment:
 
 ```bash
 make prod-run
 ```
 
-- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Automatic TLS)**:
-  - **Interactive Swagger UI**: `https://sda/`
-  - **ReDoc API Reference**: `https://sda/docs`
-  - **Direct API Endpoints**: `https://sda/v1/...` or `https://sda/api/v1/...`
-  - **Team / Custom Domain Alias**: `https://sda.dev.astrealabs.com/api/v1/...`
-- 🛠️ **DIY Nginx Gateway (Local Only)**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
+- ⚡ **HTTPS Gateway**: `https://sda.localtest.me:8443`
+- 🌐 **HTTP Gateway**: `http://localhost:8888`
 - ⚡ **Direct Production API**: `http://localhost:8880`
-- 🗄️ **PostgreSQL Database**: `postgres:5432` (Docker DNS)
-- 💾 **Redis L2 Cache**: `redis:6379` (Docker DNS)
+- 🗄️ **PostgreSQL**: `postgres:5432` (Docker DNS)
+- 💾 **Redis**: `redis:6379` (Docker DNS)
 
 ---
 
@@ -127,26 +129,6 @@ Builds an optimized, unprivileged production container image (`astrea-sda-api:la
 ```bash
 make prod
 ```
-
----
-
-## 🌐 Tailscale OSS Gateway CLI & Workflow Commands
-
-A batteries-included helper script `./scripts/tailscale.sh` manages Tailscale across all running stacks:
-
-```bash
-make tailscale-status  # Check connection, node name, and MagicDNS status
-make tailscale-login   # Display one-time browser login link if TS_AUTHKEY is unset
-make tailscale-urls    # Print all accessible HTTPS and DIY fallback URLs
-make tailscale-ping    # Test live HTTPS connectivity to https://sda/
-```
-
-| Mode | Command | Configuration File | Upstream Proxy Target |
-| :--- | :--- | :--- | :--- |
-| **Host Hot-Reload** | `make dev-hot` | `tailscale/serve-hot.json` | `http://host.docker.internal:8080` |
-| **Containerized Dev** | `make dev` | `tailscale/serve-dev.json` | `http://api-dev:8080` |
-| **Local Production** | `make prod-run` | `tailscale/serve-prod.json` | `http://api:8080` |
-
 
 ---
 
@@ -165,34 +147,33 @@ make tailscale-ping    # Test live HTTPS connectivity to https://sda/
 
 ## ⚙️ Environment Configuration
 
-Set these environment variables in `docker-compose.yml`, Kubernetes manifests, or cloud container services:
+Set these environment variables in `.env`, Kubernetes manifests, or cloud container services:
 
-| Variable | Container Default | Description |
+| Variable | Default | Description |
 | :--- | :--- | :--- |
 | `POSTGRES_URI` | `postgres://astrea:astreadbpass@postgres:5432/astrea_sda` | PostgreSQL connection string using Docker DNS |
 | `REDIS_URL` | `redis://redis:6379` | Redis L2 cache connection string using Docker DNS |
 | `HOST` | `0.0.0.0` | Container bind address |
 | `PORT` | `8080` | Container HTTP port |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Background CelesTrak TLE sync worker |
-| `TS_AUTHKEY` | *(none)* | Tailscale reusable or ephemeral auth key for zero-touch joining |
-| `TS_HOSTNAME` | `sda` | Tailscale MagicDNS node hostname (`https://sda/`) |
-| `TS_USERSPACE` | `true` | Tailscale userspace networking (no root privileges or `/dev/net/tun` required) |
-| `TS_SERVE_CONFIG` | `/config/serve.json` | Tailscale Serve JSON proxy definition path |
 | `RSA_PRIVATE_KEY` | *(none)* | PEM string of RSA 2048 private key (for RS256 token signing) |
 | `RSA_PUBLIC_KEY` | *(none)* | PEM string of RSA 2048 public key (for RS256 token verification) |
-
+| `RSA_PRIVATE_KEY_FILE` | `.keys/rsa_private.pem` | Path to RSA private key PEM file |
+| `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 
 ---
 
 ## 🧹 Cleaning Up Docker Resources
 
 ```bash
-# Stop production containers
-docker compose down
+# Stop all running containers across dev, dev-hot, and prod
+make stop
 
-# Stop production containers and delete data volumes
+# Stop containers and clean target cache
+make clean
+
+# Stop containers and delete named volumes
 docker compose down -v
-
-# Stop development containers
 docker compose -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.dev-hot.yml down -v
 ```

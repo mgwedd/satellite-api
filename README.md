@@ -77,29 +77,30 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ### Running with Docker & Build Targets (`Makefile`)
 
-Astrea SDA API provides simple build and run commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
+Astrea SDA API provides a 100% open-source, zero-account, zero-configuration local gateway powered by **Caddy** (Apache 2.0). See **[DOCKER.md](DOCKER.md)** for detailed architecture.
 
 #### 1. Local Host Hot-Reload (`make dev-hot`)
-PostgreSQL + Redis + Tailscale OSS Gateway + Nginx stack with instant sub-second hot-reload via host `cargo-watch`:
-- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Real TLS)**:
-  - Swagger UI / ReDoc : `https://sda/` (or `https://sda/docs`)
-  - Direct API         : `https://sda/v1/...` or `https://sda/api/v1/...`
-  - Custom Domain      : `https://sda.dev.astrealabs.com/api/v1/...`
-- 🛠️ **DIY Nginx Gateway (Local Only)**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
+PostgreSQL + Redis + Caddy stack with instant sub-second hot-reload via host `cargo-watch`:
+- ⚡ **HTTPS (Automatic TLS)**: `https://sda.localtest.me:8443` (or `https://localhost:8443`)
+  - Swagger UI : `https://sda.localtest.me:8443/` (or `/swagger-ui/`)
+  - ReDoc Docs : `https://sda.localtest.me:8443/docs`
+  - Direct API : `https://sda.localtest.me:8443/v1/...` (or `/api/v1/...`)
+- 🌐 **HTTP Fallback**: `http://sda.localtest.me:8888` (or `http://localhost:8888`)
+- *(Zero accounts, zero signups, zero `/etc/hosts` editing needed)*
 
 ```bash
 make dev-hot
 ```
 
 #### 2. Containerized Local Dev (`make dev`)
-Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts and the Tailscale OSS gateway:
+Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts and Caddy:
 
 ```bash
 make dev
 ```
 
 #### 3. Local Production Multi-Container Stack (`make prod-run`)
-Runs the compiled production container image locally with PostgreSQL, Redis, Tailscale OSS gateway, and Nginx reverse proxy:
+Runs the compiled production container image locally with PostgreSQL, Redis, and Caddy:
 
 ```bash
 make prod-run
@@ -112,13 +113,6 @@ Builds an optimized, unprivileged production container image (`astrea-sda-api:la
 make prod
 ```
 
-#### 5. Tailscale CLI Utilities
-```bash
-make tailscale-status  # Check connection, node name, and MagicDNS status
-make tailscale-login   # Display one-time browser login link if TS_AUTHKEY is unset
-make tailscale-urls    # Print all accessible HTTPS and DIY fallback URLs
-make tailscale-ping    # Test live HTTPS connectivity to https://sda/
-```
 
 
 
@@ -138,7 +132,7 @@ Set environment variables to customize runtime behavior:
 | `RSA_PUBLIC_KEY_FILE` | `.keys/rsa_public.pem` | Path to RSA public key PEM file |
 | `REDIS_URL` | *(none)* | Optional Redis connection string (e.g., `redis://127.0.0.1:6379`) for L2 caching |
 | `ENABLE_DISCOVERY_PIPELINE` | `true` | Enable background CelesTrak synchronization worker (refreshes every 6h) |
-| `TS_AUTHKEY` | *(none)* | Tailscale auth key in `.env` for zero-config HTTPS gateway (`https://sda/`) |
+
 
 
 
