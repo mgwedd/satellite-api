@@ -63,6 +63,7 @@ impl Modify for SecurityAddon {
         schemas(
             auth::UserRole,
             auth::Claims,
+            auth::CnfClaim,
             auth::SignupRequest,
             auth::LoginRequest,
             auth::ClientAssertionRequest,

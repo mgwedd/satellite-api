@@ -1,7 +1,7 @@
 use crate::auth::provider::AuthProvider;
 use crate::auth::{AuthResponse, Claims, ClientAssertionRequest, LoginRequest, SignupRequest};
 use crate::error::AppError;
-use axum::{extract::State, Json};
+use axum::{extract::State, http::HeaderMap, Json};
 use std::sync::Arc;
 
 /// Developer Account Registration
@@ -65,9 +65,18 @@ pub async fn login_handler(
 )]
 pub async fn token_exchange_handler(
     State(provider): State<Arc<dyn AuthProvider>>,
+    headers: HeaderMap,
     Json(payload): Json<ClientAssertionRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let res = provider.client_assertion_token_exchange(&payload).await?;
+    let cert_fingerprint = headers
+        .get("x-client-cert-fingerprint")
+        .or_else(|| headers.get("x-client-cert-hash"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string());
+
+    let res = provider
+        .client_assertion_token_exchange(&payload, cert_fingerprint)
+        .await?;
     Ok(Json(res))
 }
 
