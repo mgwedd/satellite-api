@@ -1,73 +1,49 @@
 # ==============================================================================
-# Astrea Space Domain Awareness (SDA) API - Developer Makefile
+# Astrea Space Domain Awareness (SDA) API - Self-Documenting Developer Makefile
 # ==============================================================================
 
-# User-overridable variables for token generation
 USER ?= admin_user
 ROLE ?= admin
 
+.DEFAULT_GOAL := help
+
 .PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
 
-help:
+help: ## Display this self-documenting developer help menu
 	@echo "=============================================================================="
-	@echo "🛰️ Astrea SDA API Developer Makefile Options:"
+	@echo "🛰️  Astrea SDA API Developer Makefile"
 	@echo "=============================================================================="
-	@echo "BUILD & CONTAINER TARGETS:"
-	@echo "  make dev-hot      (or make build dev-hot) - Docker DNS/Nginx stack with local host app hot-reload"
-	@echo "  make dev          (or make build dev)     - Fully containerized local dev stack (cargo-watch in Docker)"
-	@echo "  make prod         (or make build prod)    - Build optimized production container image (with build tests)"
-	@echo "  make install                              - Install binary locally into ~/.cargo/bin"
-	@echo "  make install-dev                          - Full developer setup (cargo-watch, fern, keys, hooks, binary)"
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 	@echo ""
-	@echo "CODE QUALITY & TESTING:"
-	@echo "  make check                                - Run fast offline compilation check"
-	@echo "  make fmt                                  - Format code using cargo fmt"
-	@echo "  make lint                                 - Run cargo clippy lints with strict warning checks"
-	@echo "  make test                                 - Run full workspace offline test suite"
-	@echo "  make test-watch                           - Continuously run test suite on file changes"
-	@echo ""
-	@echo "KEYS & AUTHENTICATION:"
-	@echo "  make keys                                 - Generate local RSA 2048 keypair & dev TLS certs"
-	@echo "  make jwt [USER=...] [ROLE=...]            - Generate signed RS256 Bearer JWT test token"
-	@echo ""
-	@echo "API DOCS & CLIENT SDK GENERATION:"
-	@echo "  make ui                                   - Launch interactive OpenAPI UI documentation selector"
-	@echo "  make openapi                              - Verify OpenAPI 3.0 schema contract stability"
-	@echo "  make sdk                                  - Generate all SDKs (TypeScript, Python, Go, Java, Rust)"
-	@echo "  make sdk-ts / make sdk-typescript         - Generate TypeScript / Node.js SDK"
-	@echo "  make sdk-python / make sdk-py             - Generate Python SDK"
-	@echo "  make sdk-go                               - Generate Go SDK"
-	@echo "  make sdk-java                             - Generate Java SDK"
-	@echo "  make sdk-rust                             - Generate Rust SDK"
-	@echo ""
-	@echo "DOCKER OPERATIONS & HOUSEKEEPING:"
-	@echo "  make hooks                                - Install git pre-commit quality hooks"
-	@echo "  make logs                                 - Stream Docker container logs"
-	@echo "  make stop                                 - Stop all running Docker containers"
-	@echo "  make clean                                - Stop Docker stacks and clean build artifacts"
-	@echo "=============================================================================="
 
-# Default 'make build' builds production image unless sub-target (dev-hot / dev / prod) is specified
-build:
+##@ Build & Containers
+
+build: ## Build production container image (alias for make prod)
 	@if [ "$(filter-out build,$(MAKECMDGOALS))" = "" ]; then \
 		./scripts/docker-build.sh; \
 	fi
 
-dev-hot:
+dev-hot: ## Run host app + Docker DNS stack (Postgres + Redis + Nginx) with sub-second hot-reload
 	@./scripts/docker-dev-hot.sh
 
-dev:
+dev: ## Run fully containerized local dev stack (cargo-watch running inside Docker)
 	@./scripts/docker-dev.sh
 
-prod:
+prod: ## Build optimized production container image with build verification tests
 	@./scripts/docker-build.sh
 
-install:
+build-dev-hot: dev-hot
+build-dev: dev
+build-prod: prod
+
+##@ Installation & Setup
+
+install: ## Install compiled binary locally into ~/.cargo/bin
 	@echo "Installing astrea-sda-api binary locally..."
 	cargo install --path .
 	@echo "✅ Installed astrea-sda-api binary into ~/.cargo/bin/astrea-sda-api"
 
-install-dev: keys hooks install
+install-dev: keys hooks install ## Full developer onboarding (keys, TLS certs, hooks, cargo-watch, fern, binary)
 	@echo "=========================================================="
 	@echo "🛠️ Installing Local Developer Tooling & Dependencies..."
 	@echo "=========================================================="
@@ -85,97 +61,97 @@ install-dev: keys hooks install
 	@echo "✅ Developer environment fully initialized!"
 	@echo "=========================================================="
 
-build-dev-hot: dev-hot
-build-dev: dev
-build-prod: prod
-
-# Code Quality & Testing Targets
-check:
-	cargo check --offline
-
-fmt:
-	cargo fmt
-
-lint:
-	cargo clippy --all-targets --all-features --offline -- -D warnings
-
-test:
-	cargo test --offline
-
-test-watch:
-	cargo watch -x 'test --offline'
-
-# Keys & Auth Targets
-keys:
+keys: ## Auto-generate local RSA 2048 keypair & dev TLS certificates in .keys/
 	@./scripts/setup-keys.sh
 
-jwt: keys
+hooks: ## Install Rust git pre-commit quality hooks via cargo-husky
+	@./scripts/setup-hooks.sh
+
+##@ Code Quality & Testing
+
+check: ## Fast offline compilation check without generating binaries
+	cargo check --offline
+
+fmt: ## Format Rust codebase using cargo fmt
+	cargo fmt
+
+lint: ## Run cargo clippy lints with strict warning enforcement (-D warnings)
+	cargo clippy --all-targets --all-features --offline -- -D warnings
+
+test: ## Run full workspace test suite offline
+	cargo test --offline
+
+test-watch: ## Continuously run workspace test suite on source file changes
+	cargo watch -x 'test --offline'
+
+##@ Authentication & Testing
+
+jwt: keys ## Generate signed RS256 Bearer JWT test token (usage: make jwt USER=admin_user ROLE=admin)
 	@./scripts/make-jwt.sh $(USER) $(ROLE)
 
-# API Explorer & SDK Targets
-ui:
+##@ OpenAPI & SDK Generation
+
+ui: ## Launch interactive OpenAPI UI documentation selector
 	@./scripts/dev-ui.sh
 
-openapi:
+openapi: ## Verify OpenAPI 3.0 schema contract stability and JSON sync
 	cargo test --test openapi_contract_tests
 
-sdk: sdk-all
+sdk: sdk-all ## Generate all client SDKs (TypeScript, Python, Go, Java, Rust)
 
-sdk-all:
+sdk-all: ## Generate all SDKs via Fern
 	@if command -v fern &> /dev/null; then \
 		fern generate --group local; \
 	else \
 		npx fern generate --group local; \
 	fi
 
-sdk-ts: sdk-typescript
-sdk-typescript:
+sdk-ts: sdk-typescript ## Shortcut for make sdk-typescript
+sdk-typescript: ## Generate TypeScript / Node.js SDK
 	@if command -v fern &> /dev/null; then \
 		fern generate --group ts; \
 	else \
 		npx fern generate --group ts; \
 	fi
 
-sdk-py: sdk-python
-sdk-python:
+sdk-py: sdk-python ## Shortcut for make sdk-python
+sdk-python: ## Generate Python SDK
 	@if command -v fern &> /dev/null; then \
 		fern generate --group python; \
 	else \
 		npx fern generate --group python; \
 	fi
 
-sdk-go:
+sdk-go: ## Generate Go SDK
 	@if command -v fern &> /dev/null; then \
 		fern generate --group go; \
 	else \
 		npx fern generate --group go; \
 	fi
 
-sdk-java:
+sdk-java: ## Generate Java SDK
 	@if command -v fern &> /dev/null; then \
 		fern generate --group java; \
 	else \
 		npx fern generate --group java; \
 	fi
 
-sdk-rust:
+sdk-rust: ## Generate Rust SDK
 	@if command -v fern &> /dev/null; then \
 		fern generate --group rust; \
 	else \
 		npx fern generate --group rust; \
 	fi
 
-# Operations & Housekeeping Targets
-hooks:
-	@./scripts/setup-hooks.sh
+##@ Docker Operations & Housekeeping
 
-logs:
+logs: ## Stream Docker container logs
 	docker compose logs -f
 
-stop:
+stop: ## Stop all running Docker containers across environments
 	-docker compose down
 	-docker compose -f docker-compose.dev.yml down
 	-docker compose -f docker-compose.dev-hot.yml down
 
-clean: stop
+clean: stop ## Stop Docker containers and clean target build directory
 	cargo clean
