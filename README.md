@@ -115,7 +115,7 @@ Set environment variables to customize runtime behavior:
 
 ---
 
-## 🛰️ Core API Endpoints & Interactive Specification
+## 🛰️ Explore the API Endpoints
 
 [![Interactive OpenAPI Docs](https://img.shields.io/badge/Interactive_OpenAPI_Docs-GitHub_Pages-blue?style=for-the-badge&logo=openapi-initiative&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/)
 [![OpenAPI 3.0 Spec](https://img.shields.io/badge/OpenAPI_3.0_Spec-JSON-green?style=for-the-badge&logo=json&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/openapi.json)
