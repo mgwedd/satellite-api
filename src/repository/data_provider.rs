@@ -455,11 +455,9 @@ impl DataProvider for PostgresDataProvider {
     }
 }
 
-/// Supabase REST DataProvider interacting with Supabase PostgREST API endpoints.
+/// Supabase Cloud DataProvider utilizing the official Supabase PostgREST client library (`postgrest`).
 pub struct SupabaseDataProvider {
-    supabase_url: String,
-    apikey: String,
-    client: reqwest::Client,
+    client: postgrest::Postgrest,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -480,18 +478,11 @@ struct SupabaseTleRow {
 
 impl SupabaseDataProvider {
     pub fn new(supabase_url: String, apikey: String) -> Self {
-        Self {
-            supabase_url: supabase_url.trim_end_matches('/').to_string(),
-            apikey,
-            client: reqwest::Client::new(),
-        }
-    }
-
-    fn auth_headers(&self, req_builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        req_builder
-            .header("apikey", &self.apikey)
-            .header("Authorization", format!("Bearer {}", self.apikey))
-            .header("Content-Type", "application/json")
+        let endpoint = format!("{}/rest/v1", supabase_url.trim_end_matches('/'));
+        let client = postgrest::Postgrest::new(endpoint)
+            .insert_header("apikey", &apikey)
+            .insert_header("Authorization", format!("Bearer {}", apikey));
+        Self { client }
     }
 }
 
@@ -509,12 +500,11 @@ impl DataProvider for SupabaseDataProvider {
             "last_modified_date": now
         });
 
-        let url = format!("{}/rest/v1/satellites", self.supabase_url);
         let resp = self
-            .auth_headers(self.client.post(&url))
-            .header("Prefer", "return=representation")
-            .json(&body)
-            .send()
+            .client
+            .from("satellites")
+            .insert(body.to_string())
+            .execute()
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Supabase create request failed: {}", e))
@@ -528,7 +518,6 @@ impl DataProvider for SupabaseDataProvider {
             )));
         }
 
-        let history_url = format!("{}/rest/v1/tle_history", self.supabase_url);
         let history_body = serde_json::json!({
             "satellite_id": id,
             "line_one": dto.line_one,
@@ -536,9 +525,10 @@ impl DataProvider for SupabaseDataProvider {
             "epoch": now
         });
         let _ = self
-            .auth_headers(self.client.post(&history_url))
-            .json(&history_body)
-            .send()
+            .client
+            .from("tle_history")
+            .insert(history_body.to_string())
+            .execute()
             .await;
 
         Ok(Satellite {
@@ -554,13 +544,12 @@ impl DataProvider for SupabaseDataProvider {
     }
 
     async fn get_satellite(&self, id: Uuid) -> Result<Satellite, AppError> {
-        let url = format!(
-            "{}/rest/v1/satellites?id=eq.{}&select=*",
-            self.supabase_url, id
-        );
         let resp = self
-            .auth_headers(self.client.get(&url))
-            .send()
+            .client
+            .from("satellites")
+            .select("*")
+            .eq("id", id.to_string())
+            .execute()
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Supabase request failed: {}", e))
@@ -570,7 +559,11 @@ impl DataProvider for SupabaseDataProvider {
             return Err(AppError::NotFound);
         }
 
-        let rows: Vec<SupabaseSatelliteRow> = resp.json().await.map_err(|e| {
+        let body_text = resp
+            .text()
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let rows: Vec<SupabaseSatelliteRow> = serde_json::from_str(&body_text).map_err(|e| {
             AppError::InternalServerError(format!("Invalid Supabase payload: {}", e))
         })?;
 
@@ -588,10 +581,11 @@ impl DataProvider for SupabaseDataProvider {
     }
 
     async fn list_satellites(&self) -> Result<Vec<Satellite>, AppError> {
-        let url = format!("{}/rest/v1/satellites?select=*", self.supabase_url);
         let resp = self
-            .auth_headers(self.client.get(&url))
-            .send()
+            .client
+            .from("satellites")
+            .select("*")
+            .execute()
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Supabase request failed: {}", e))
@@ -601,7 +595,11 @@ impl DataProvider for SupabaseDataProvider {
             return Ok(vec![]);
         }
 
-        let rows: Vec<SupabaseSatelliteRow> = resp.json().await.map_err(|e| {
+        let body_text = resp
+            .text()
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let rows: Vec<SupabaseSatelliteRow> = serde_json::from_str(&body_text).map_err(|e| {
             AppError::InternalServerError(format!("Invalid Supabase payload: {}", e))
         })?;
 
@@ -631,7 +629,6 @@ impl DataProvider for SupabaseDataProvider {
         let line_two = dto.line_two.unwrap_or(current.tle.line_two);
         let now = Utc::now();
 
-        let url = format!("{}/rest/v1/satellites?id=eq.{}", self.supabase_url, id);
         let body = serde_json::json!({
             "name": name,
             "line_one": line_one,
@@ -640,9 +637,11 @@ impl DataProvider for SupabaseDataProvider {
         });
 
         let resp = self
-            .auth_headers(self.client.patch(&url))
-            .json(&body)
-            .send()
+            .client
+            .from("satellites")
+            .eq("id", id.to_string())
+            .update(body.to_string())
+            .execute()
             .await
             .map_err(|e| AppError::InternalServerError(format!("Supabase update failed: {}", e)))?;
 
@@ -650,7 +649,6 @@ impl DataProvider for SupabaseDataProvider {
             return Err(AppError::NotFound);
         }
 
-        let history_url = format!("{}/rest/v1/tle_history", self.supabase_url);
         let history_body = serde_json::json!({
             "satellite_id": id,
             "line_one": line_one,
@@ -658,9 +656,10 @@ impl DataProvider for SupabaseDataProvider {
             "epoch": now
         });
         let _ = self
-            .auth_headers(self.client.post(&history_url))
-            .json(&history_body)
-            .send()
+            .client
+            .from("tle_history")
+            .insert(history_body.to_string())
+            .execute()
             .await;
 
         Ok(Satellite {
@@ -673,10 +672,12 @@ impl DataProvider for SupabaseDataProvider {
     }
 
     async fn delete_satellite(&self, id: Uuid) -> Result<(), AppError> {
-        let url = format!("{}/rest/v1/satellites?id=eq.{}", self.supabase_url, id);
         let resp = self
-            .auth_headers(self.client.delete(&url))
-            .send()
+            .client
+            .from("satellites")
+            .eq("id", id.to_string())
+            .delete()
+            .execute()
             .await
             .map_err(|e| AppError::InternalServerError(format!("Supabase delete failed: {}", e)))?;
 
@@ -688,13 +689,13 @@ impl DataProvider for SupabaseDataProvider {
     }
 
     async fn list_tle_history(&self, satellite_id: Uuid) -> Result<Vec<Tle>, AppError> {
-        let url = format!(
-            "{}/rest/v1/tle_history?satellite_id=eq.{}&select=line_one,line_two&order=epoch.asc",
-            self.supabase_url, satellite_id
-        );
         let resp = self
-            .auth_headers(self.client.get(&url))
-            .send()
+            .client
+            .from("tle_history")
+            .select("line_one,line_two")
+            .eq("satellite_id", satellite_id.to_string())
+            .order("epoch.asc")
+            .execute()
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Supabase request failed: {}", e))
@@ -705,7 +706,8 @@ impl DataProvider for SupabaseDataProvider {
             return Ok(vec![sat.tle]);
         }
 
-        let rows: Vec<SupabaseTleRow> = resp.json().await.unwrap_or_default();
+        let body_text = resp.text().await.unwrap_or_default();
+        let rows: Vec<SupabaseTleRow> = serde_json::from_str(&body_text).unwrap_or_default();
 
         if rows.is_empty() {
             let sat = self.get_satellite(satellite_id).await?;
@@ -722,7 +724,6 @@ impl DataProvider for SupabaseDataProvider {
     }
 
     async fn add_tle_history(&self, satellite_id: Uuid, tle: Tle) -> Result<(), AppError> {
-        let url = format!("{}/rest/v1/tle_history", self.supabase_url);
         let now = Utc::now();
         let body = serde_json::json!({
             "satellite_id": satellite_id,
@@ -732,9 +733,10 @@ impl DataProvider for SupabaseDataProvider {
         });
 
         let resp = self
-            .auth_headers(self.client.post(&url))
-            .json(&body)
-            .send()
+            .client
+            .from("tle_history")
+            .insert(body.to_string())
+            .execute()
             .await
             .map_err(|e| {
                 AppError::InternalServerError(format!("Supabase insert TLE failed: {}", e))
