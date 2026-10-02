@@ -96,13 +96,27 @@ async fn test_groundtrack_endpoint_and_geojson() {
     let sat_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let sat_id = sat_json["id"].as_str().unwrap();
 
-    // 2. Query Ground Track endpoint with format=all (GeoJSON + Footprint Polygon + CZML)
+    // 2a. Query Ground Track without authorization -> Expect 401 Unauthorized
     let req = Request::builder()
         .method("GET")
         .uri(format!(
             "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=all&start_time=2021-08-27T12:00:00Z",
             sat_id
         ))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // 2b. Query Ground Track endpoint with valid JWT Bearer header (format=all)
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!(
+            "/v1/satellites/{}/groundtrack?duration_minutes=30&step_seconds=60&format=all&start_time=2021-08-27T12:00:00Z",
+            sat_id
+        ))
+        .header("authorization", format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 

@@ -100,28 +100,32 @@ pub async fn create_satellite(
 
 /// List Satellites
 ///
-/// Retrieves a paginated list of satellites using base64 checkpoint cursors.
+/// Retrieves a paginated list of satellites using base64 checkpoint cursors. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites",
     operation_id = "listSatellites",
     params(PaginationQuery),
     responses(
-        (status = 200, description = "Paginated list of satellites", body = PaginatedResponseSatellite)
+        (status = 200, description = "Paginated list of satellites", body = PaginatedResponseSatellite),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Satellites"
 )]
 pub async fn list_satellites(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<Json<PaginatedResponse<Satellite>>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let paginated_res = repo.list_satellites_paginated(pagination).await?;
     Ok(Json(paginated_res))
 }
 
 /// Get Satellite by ID
 ///
-/// Retrieves details for a specific satellite by its unique UUID.
+/// Retrieves details for a specific satellite by its unique UUID. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}",
@@ -131,14 +135,18 @@ pub async fn list_satellites(
     ),
     responses(
         (status = 200, description = "Satellite found", body = Satellite),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Satellites"
 )]
 pub async fn get_satellite(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Satellite>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     Ok(Json(satellite))
 }
@@ -257,22 +265,26 @@ pub async fn trigger_pipeline_sync(
 
 /// Get Overhead Satellite
 ///
-/// Computes the satellite closest to overhead (highest elevation) across all tracked satellites using parallel Rayon propagation.
+/// Computes the satellite closest to overhead (highest elevation) across all tracked satellites using parallel Rayon propagation. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
-    path = "/v1/astrodynamics/overhead",
+    path = "/v1/satellites/overhead",
     operation_id = "getOverheadSatellite",
     params(OverheadQueryParams),
     responses(
         (status = 200, description = "Overhead satellite computed successfully", body = OverheadResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "No satellite overhead found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_overhead(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(params): Query<OverheadQueryParams>,
 ) -> Result<Json<OverheadResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellites = repo.list_satellites().await?;
     if satellites.is_empty() {
         return Err(AppError::NotFound);
@@ -318,7 +330,7 @@ pub async fn get_overhead(
 
 /// Get Next Visible Pass
 ///
-/// Calculates the next visible pass for a specific satellite above elevation threshold.
+/// Calculates the next visible pass for a specific satellite above elevation threshold. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}/next-visible",
@@ -329,15 +341,19 @@ pub async fn get_overhead(
     ),
     responses(
         (status = 200, description = "Next visible pass calculated successfully", body = NextVisiblePassResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_next_visible(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     Query(params): Query<NextVisibleQueryParams>,
 ) -> Result<Json<NextVisiblePassResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let start_time = Utc::now();
     let alt = params.alt.unwrap_or(0.0);
@@ -370,7 +386,7 @@ pub async fn get_next_visible(
 
 /// Get Satellite 3D Ground Track & Trajectory
 ///
-/// Computes 3D ECF coordinates, geodetic position, orbital period, footprint radius, and GeoJSON ground track line.
+/// Computes 3D ECF coordinates, geodetic position, orbital period, footprint radius, and GeoJSON ground track line. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}/groundtrack",
@@ -381,16 +397,20 @@ pub async fn get_next_visible(
     ),
     responses(
         (status = 200, description = "3D Ground Track and GeoJSON trajectory", body = GroundTrackResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse),
         (status = 500, description = "Internal calculation error", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_ground_track(
+    claims: Claims,
     Path(id): Path<Uuid>,
     Query(params): Query<GroundTrackQueryParams>,
     State(repo): State<SatelliteRepository>,
 ) -> Result<Json<GroundTrackResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let start_time = params.start_time.unwrap_or_else(Utc::now);
     let duration_minutes = params.duration_minutes.unwrap_or(90);
@@ -453,7 +473,7 @@ pub struct IlluminationQueryParams {
 
 /// Get Satellite Illumination & Visual Magnitude
 ///
-/// Computes solar shadow geometry (FullSunlight, Penumbra, Umbra), observer twilight state, observable status, and visual magnitude.
+/// Computes solar shadow geometry (FullSunlight, Penumbra, Umbra), observer twilight state, observable status, and visual magnitude. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}/illumination",
@@ -464,15 +484,19 @@ pub struct IlluminationQueryParams {
     ),
     responses(
         (status = 200, description = "Satellite illumination status computed successfully", body = IlluminationResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_satellite_illumination(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     Query(params): Query<IlluminationQueryParams>,
 ) -> Result<Json<IlluminationResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let time = params.time.unwrap_or_else(Utc::now);
     let alt = params.alt.unwrap_or(0.0);
@@ -511,7 +535,7 @@ pub struct ConjunctionSearchQueryParams {
 
 /// Search Conjunctions & Satellite Collision Radar
 ///
-/// Evaluates close-approach orbital conjunctions across all active satellites using Rayon parallel execution.
+/// Evaluates close-approach orbital conjunctions across all active satellites using Rayon parallel execution. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/conjunctions/search",
@@ -519,14 +543,18 @@ pub struct ConjunctionSearchQueryParams {
     params(ConjunctionSearchQueryParams),
     responses(
         (status = 200, description = "Conjunction radar search completed successfully", body = ConjunctionSearchResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 500, description = "Internal calculation error", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Astrodynamics"
 )]
 pub async fn search_conjunctions(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(params): Query<ConjunctionSearchQueryParams>,
 ) -> Result<Json<ConjunctionSearchResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellites = repo.list_satellites().await?;
     let start_time = Utc::now();
     let max_distance_km = params.max_distance_km.unwrap_or(10.0);
@@ -579,7 +607,7 @@ pub struct DopplerQueryParams {
 
 /// Get Satellite RF Doppler Shift
 ///
-/// Computes range rate (km/s), Doppler frequency shift (Hz), and corrected transmitter frequency for ground station tracking.
+/// Computes range rate (km/s), Doppler frequency shift (Hz), and corrected transmitter frequency for ground station tracking. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}/doppler",
@@ -590,15 +618,19 @@ pub struct DopplerQueryParams {
     ),
     responses(
         (status = 200, description = "Doppler shift computed successfully", body = DopplerResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_satellite_doppler(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     Query(params): Query<DopplerQueryParams>,
 ) -> Result<Json<DopplerResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let time = params.time.unwrap_or_else(Utc::now);
     let alt_km = params.alt_km.unwrap_or(0.0);
@@ -636,7 +668,7 @@ pub async fn get_satellite_doppler(
 
 /// Reconstruct Satellite Orbital Maneuvers
 ///
-/// Detects trajectory step discontinuities and calculates delta-V vector components, fuel consumption, and maneuver classification.
+/// Detects trajectory step discontinuities and calculates delta-V vector components, fuel consumption, and maneuver classification. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/satellites/{id}/maneuvers",
@@ -647,15 +679,19 @@ pub async fn get_satellite_doppler(
     ),
     responses(
         (status = 200, description = "Orbital maneuvers reconstructed successfully", body = ManeuversResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn get_satellite_maneuvers(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     Query(params): Query<ManeuverQueryParams>,
 ) -> Result<Json<ManeuversResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let min_sma = params.min_sma_change_km.unwrap_or(0.1);
     let min_inc = params.min_inclination_change_deg.unwrap_or(0.005);
@@ -674,7 +710,7 @@ pub async fn get_satellite_maneuvers(
 
 /// Detect Satellite Trajectory Anomalies
 ///
-/// Performs statistical residual analysis across TLE epoch parameters to identify non-natural trajectory anomalies.
+/// Performs statistical residual analysis across TLE epoch parameters to identify non-natural trajectory anomalies. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     post,
     path = "/v1/satellites/{id}/detect-anomalies",
@@ -685,15 +721,19 @@ pub async fn get_satellite_maneuvers(
     request_body = Option<AnomalyDetectionRequest>,
     responses(
         (status = 200, description = "Anomaly detection report generated successfully", body = AnomalyDetectionResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 404, description = "Satellite not found", body = ErrorResponse)
     ),
-    tag = "Astrodynamics"
+    security(("bearer_auth" = [])),
+    tag = "Satellites"
 )]
 pub async fn detect_satellite_anomalies(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Path(id): Path<Uuid>,
     body: Option<Json<AnomalyDetectionRequest>>,
 ) -> Result<Json<AnomalyDetectionResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellite = repo.get_satellite_by_id(id).await?;
     let (sigma, sma, inc) = match body {
         Some(Json(req)) => (
@@ -711,7 +751,7 @@ pub async fn detect_satellite_anomalies(
 
 /// Predict Solar Satellite Transits
 ///
-/// Predicts satellite silhouettes crossing in front of the Solar disk for a ground station observer.
+/// Predicts satellite silhouettes crossing in front of the Solar disk for a ground station observer. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/transits/solar",
@@ -719,14 +759,18 @@ pub async fn detect_satellite_anomalies(
     params(TransitQueryParams),
     responses(
         (status = 200, description = "Solar transit predictions generated successfully", body = TransitPredictionResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 500, description = "Internal calculation error", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Astrodynamics"
 )]
 pub async fn get_solar_transits(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(params): Query<TransitQueryParams>,
 ) -> Result<Json<TransitPredictionResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellites = repo.list_satellites().await?;
     let start_time = Utc::now();
     let alt_km = params.alt.unwrap_or(0.0) / 1000.0;
@@ -753,7 +797,7 @@ pub async fn get_solar_transits(
 
 /// Predict Lunar Satellite Transits
 ///
-/// Predicts satellite silhouettes crossing in front of the Lunar disk for a ground station observer.
+/// Predicts satellite silhouettes crossing in front of the Lunar disk for a ground station observer. Protected by JWT auth (requires 'viewer', 'editor', or 'admin' role).
 #[utoipa::path(
     get,
     path = "/v1/transits/lunar",
@@ -761,14 +805,18 @@ pub async fn get_solar_transits(
     params(TransitQueryParams),
     responses(
         (status = 200, description = "Lunar transit predictions generated successfully", body = TransitPredictionResponse),
+        (status = 401, description = "Unauthorized - Missing or invalid JWT token", body = ErrorResponse),
         (status = 500, description = "Internal calculation error", body = ErrorResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "Astrodynamics"
 )]
 pub async fn get_lunar_transits(
+    claims: Claims,
     State(repo): State<SatelliteRepository>,
     Query(params): Query<TransitQueryParams>,
 ) -> Result<Json<TransitPredictionResponse>, AppError> {
+    claims.require_role(UserRole::Viewer)?;
     let satellites = repo.list_satellites().await?;
     let start_time = Utc::now();
     let alt_km = params.alt.unwrap_or(0.0) / 1000.0;

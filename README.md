@@ -38,11 +38,18 @@ Choose your preferred development workflow:
 ### 3. Verify with cURL
 
 ```bash
-# Query the 5 nearest tracked satellites
-curl -s "https://sda.localtest.me:8443/v1/satellites?limit=5" | jq
+# 1. Obtain a JWT Bearer token
+TOKEN=$(curl -s -X POST "https://sda.localtest.me:8443/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@astrea.local","password":"password123"}' | jq -r .token)
 
-# Find the satellite highest overhead in San Francisco right now
-curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+# 2. Query the 5 nearest tracked satellites (Requires Bearer Auth)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://sda.localtest.me:8443/v1/satellites?limit=5" | jq
+
+# 3. Find the satellite highest overhead in San Francisco right now
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://sda.localtest.me:8443/v1/satellites/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
 ---
@@ -75,17 +82,20 @@ curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon
 
 ### 1. Find Overhead Satellites
 ```bash
-curl -s "https://sda.localtest.me:8443/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://sda.localtest.me:8443/v1/satellites/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
 ### 2. Generate 90-Minute 3D GeoJSON Ground Track
 ```bash
-curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
 ```
 
 ### 3. Compute Next Visible Pass
 ```bash
-curl -s "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://sda.localtest.me:8443/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```
 
 ### 4. Authenticate & Issue Scoped Bearer Token

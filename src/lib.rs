@@ -104,8 +104,8 @@ impl Modify for SecurityAddon {
     modifiers(&SecurityAddon),
     tags(
         (name = "Authentication", description = "JWT Token issuance endpoints"),
-        (name = "Satellites", description = "Satellite management endpoints"),
-        (name = "Astrodynamics", description = "Orbital calculations and pass predictions"),
+        (name = "Satellites", description = "Satellite catalog, telemetry, and individual satellite astrodynamics"),
+        (name = "Astrodynamics", description = "Multi-satellite and celestial space domain awareness (SDA) calculations"),
         (name = "Pipelines", description = "CelesTrak automated discovery pipelines")
     )
 )]
@@ -156,6 +156,7 @@ pub fn create_router_with_auth(
                 .patch(handlers::update_satellite)
                 .delete(handlers::delete_satellite),
         )
+        .route("/satellites/overhead", get(handlers::get_overhead))
         .route("/astrodynamics/overhead", get(handlers::get_overhead))
         .route("/conjunctions/search", get(handlers::search_conjunctions))
         .route(
