@@ -5,7 +5,7 @@
 The Astrea SDA API team takes security seriously. If you discover a security vulnerability in this repository, please do **NOT** open a public GitHub issue.
 
 Instead, please report the vulnerability privately by contacting the security team at:
-**[michael.wedd@astrealabs.com]**
+**[michael@astrealabs.com]**
 
 Please include:
 1. Description of the vulnerability and potential impact.
