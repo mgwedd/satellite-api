@@ -77,7 +77,7 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ### Running with Docker & Build Targets (`Makefile`)
 
-Astrea SDA API provides 3 simple build commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
+Astrea SDA API provides simple build and run commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
 
 #### 1. Local Host Hot-Reload (`make dev-hot`)
 PostgreSQL + Redis + Tailscale OSS Gateway + Nginx stack with instant sub-second hot-reload via host `cargo-watch`:
@@ -98,12 +98,28 @@ Runs the full application stack inside Docker containers using `cargo-watch` wit
 make dev
 ```
 
-#### 3. Production Deployable Image (`make prod`)
+#### 3. Local Production Multi-Container Stack (`make prod-run`)
+Runs the compiled production container image locally with PostgreSQL, Redis, Tailscale OSS gateway, and Nginx reverse proxy:
+
+```bash
+make prod-run
+```
+
+#### 4. Production Container Image Build (`make prod`)
 Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
 
 ```bash
 make prod
 ```
+
+#### 5. Tailscale CLI Utilities
+```bash
+make tailscale-status  # Check connection, node name, and MagicDNS status
+make tailscale-login   # Display one-time browser login link if TS_AUTHKEY is unset
+make tailscale-urls    # Print all accessible HTTPS and DIY fallback URLs
+make tailscale-ping    # Test live HTTPS connectivity to https://sda/
+```
+
 
 
 ---

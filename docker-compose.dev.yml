@@ -89,8 +89,9 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY:-}
       - TS_HOSTNAME=${TS_HOSTNAME:-sda}
       - TS_STATE_DIR=/var/lib/tailscale
-      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_SERVE_CONFIG=/config/serve-dev.json
       - TS_USERSPACE=true
+
     volumes:
       - tailscale_dev_data:/var/lib/tailscale
       - ./tailscale:/config:ro

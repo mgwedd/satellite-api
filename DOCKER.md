@@ -100,13 +100,53 @@ make dev
 
 ---
 
-### Option 3: Production Image Container Build (`make build prod`)
+### Option 3: Local Production Multi-Container Stack (`make prod-run`)
+
+Runs the compiled production container image locally alongside PostgreSQL, Redis, Tailscale OSS gateway, and Nginx reverse proxy to test the production build in a staging-equivalent environment before deployment:
+
+```bash
+make prod-run
+```
+
+- 🌐 **Main Gateway (Tailscale HTTPS - Zero `/etc/hosts`, Automatic TLS)**:
+  - **Interactive Swagger UI**: `https://sda/`
+  - **ReDoc API Reference**: `https://sda/docs`
+  - **Direct API Endpoints**: `https://sda/v1/...` or `https://sda/api/v1/...`
+  - **Team / Custom Domain Alias**: `https://sda.dev.astrealabs.com/api/v1/...`
+- 🛠️ **DIY Nginx Gateway (Local Only)**: `https://localhost:8443/sda/api/v1` (or `http://localhost:8888`)
+- ⚡ **Direct Production API**: `http://localhost:8880`
+- 🗄️ **PostgreSQL Database**: `postgres:5432` (Docker DNS)
+- 💾 **Redis L2 Cache**: `redis:6379` (Docker DNS)
+
+---
+
+### Option 4: Production Image Container Build (`make prod`)
 
 Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
 
 ```bash
-make build prod
+make prod
 ```
+
+---
+
+## 🌐 Tailscale OSS Gateway CLI & Workflow Commands
+
+A batteries-included helper script `./scripts/tailscale.sh` manages Tailscale across all running stacks:
+
+```bash
+make tailscale-status  # Check connection, node name, and MagicDNS status
+make tailscale-login   # Display one-time browser login link if TS_AUTHKEY is unset
+make tailscale-urls    # Print all accessible HTTPS and DIY fallback URLs
+make tailscale-ping    # Test live HTTPS connectivity to https://sda/
+```
+
+| Mode | Command | Configuration File | Upstream Proxy Target |
+| :--- | :--- | :--- | :--- |
+| **Host Hot-Reload** | `make dev-hot` | `tailscale/serve-hot.json` | `http://host.docker.internal:8080` |
+| **Containerized Dev** | `make dev` | `tailscale/serve-dev.json` | `http://api-dev:8080` |
+| **Local Production** | `make prod-run` | `tailscale/serve-prod.json` | `http://api:8080` |
+
 
 ---
 

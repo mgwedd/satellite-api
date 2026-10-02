@@ -12,16 +12,29 @@ TLS_CRT="$KEYS_DIR/dev-tls.crt"
 
 mkdir -p "$KEYS_DIR"
 
+# Initialize .env from template if missing
+if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
+  cp "$DIR/.env.example" "$DIR/.env"
+  echo "📄 Initialized .env configuration file from .env.example"
+fi
+
 check_tailscale_auth() {
+  local authkey=""
   if [ -n "$TS_AUTHKEY" ]; then
-    echo "🌐 Tailscale: Auth key detected in environment"
-  elif [ -f "$DIR/.env" ] && grep -q '^TS_AUTHKEY=' "$DIR/.env"; then
-    echo "🌐 Tailscale: Auth key configured in .env"
+    authkey="$TS_AUTHKEY"
+  elif [ -f "$DIR/.env" ]; then
+    authkey=$(grep -E '^TS_AUTHKEY=[^[:space:]]+' "$DIR/.env" | cut -d'=' -f2- || true)
+  fi
+
+  if [ -n "$authkey" ]; then
+    echo "🌐 Tailscale: Auth key configured (zero-config HTTPS enabled)"
   else
-    echo "🌐 Tailscale: TS_AUTHKEY not set. Set TS_AUTHKEY in .env for zero-config Tailscale HTTPS (https://sda/)."
-    echo "   (Get a free key at https://login.tailscale.com/admin/settings/keys or sign in interactively)"
+    echo "🌐 Tailscale: TS_AUTHKEY not set in .env."
+    echo "   - Option A: Add a free key to .env (https://login.tailscale.com/admin/settings/keys) for instant zero-touch join."
+    echo "   - Option B: Leave blank and approve via one-time browser link on first start (run 'make tailscale-login')."
   fi
 }
+
 
 if [[ -f "$PRIV_KEY" && -f "$PUB_KEY" && -f "$TLS_KEY" && -f "$TLS_CRT" && "$1" != "--force" ]]; then
   echo "🔑 Local RSA keypair & TLS certificates already exist in .keys/"

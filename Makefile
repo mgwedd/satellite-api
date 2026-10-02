@@ -7,7 +7,7 @@ ROLE ?= admin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod tailscale-status tailscale-login
+.PHONY: help build dev-hot dev prod prod-run prod-up check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod tailscale-status tailscale-login tailscale-urls tailscale-ping
 
 help: ## Display this self-documenting developer help menu
 	@echo "=============================================================================="
@@ -29,6 +29,10 @@ dev-hot: ## Run host app + Docker dev stack (Postgres + Redis + Tailscale + Ngin
 dev: ## Run containerized local dev stack (cargo-watch + Postgres + Redis + Tailscale + Nginx)
 	@./scripts/docker-dev.sh
 
+prod-run: ## Run production multi-container stack locally (api + Postgres + Redis + Tailscale + Nginx)
+	@./scripts/docker-prod.sh
+
+prod-up: prod-run ## Alias for make prod-run
 
 prod: ## Build optimized production container image with build verification tests
 	@./scripts/docker-build.sh
@@ -36,6 +40,7 @@ prod: ## Build optimized production container image with build verification test
 build-dev-hot: dev-hot
 build-dev: dev
 build-prod: prod
+
 
 ##@ Installation & Setup
 
@@ -144,16 +149,22 @@ sdk-rust: ## Generate Rust SDK
 		npx fern generate --group rust; \
 	fi
 
-##@ Docker Operations & Housekeeping
-
+##@ Docker Operations & Tailscale
 logs: ## Stream Docker container logs
 	docker compose logs -f
 
 tailscale-status: ## Check Tailscale gateway connection and MagicDNS status
-	@docker compose -f docker-compose.dev.yml exec tailscale tailscale status 2>/dev/null || docker compose -f docker-compose.dev-hot.yml exec tailscale tailscale status 2>/dev/null || echo "Tailscale container is not running. Start with 'make dev' or 'make dev-hot'."
+	@./scripts/tailscale.sh status
 
 tailscale-login: ## Print Tailscale interactive authentication login link
-	@docker compose -f docker-compose.dev.yml logs tailscale 2>/dev/null | grep -A 2 -B 2 "To authenticate" || docker compose -f docker-compose.dev-hot.yml logs tailscale 2>/dev/null | grep -A 2 -B 2 "To authenticate" || docker compose -f docker-compose.dev.yml logs tailscale || docker compose -f docker-compose.dev-hot.yml logs tailscale
+	@./scripts/tailscale.sh login
+
+tailscale-urls: ## Display all accessible URLs across active stacks
+	@./scripts/tailscale.sh urls
+
+tailscale-ping: ## Test HTTPS connectivity to https://sda/
+	@./scripts/tailscale.sh ping
+
 
 stop: ## Stop all running Docker containers across environments
 	-docker compose down
