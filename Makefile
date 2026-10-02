@@ -6,7 +6,7 @@
 USER ?= admin_user
 ROLE ?= admin
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
+.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk sdk-all sdk-ts sdk-typescript sdk-py sdk-python sdk-go sdk-java sdk-rust hooks install install-dev logs stop clean build-dev-hot build-dev build-prod
 
 help:
 	@echo "=============================================================================="
@@ -30,10 +30,15 @@ help:
 	@echo "  make keys                                 - Generate local RSA 2048 keypair & dev TLS certs"
 	@echo "  make jwt [USER=...] [ROLE=...]            - Generate signed RS256 Bearer JWT test token"
 	@echo ""
-	@echo "API DOCS & SDKs:"
+	@echo "API DOCS & CLIENT SDK GENERATION:"
 	@echo "  make ui                                   - Launch interactive OpenAPI UI documentation selector"
 	@echo "  make openapi                              - Verify OpenAPI 3.0 schema contract stability"
-	@echo "  make sdk                                  - Generate TypeScript, Python, Go, Java, Rust SDKs via Fern"
+	@echo "  make sdk                                  - Generate all SDKs (TypeScript, Python, Go, Java, Rust)"
+	@echo "  make sdk-ts / make sdk-typescript         - Generate TypeScript / Node.js SDK"
+	@echo "  make sdk-python / make sdk-py             - Generate Python SDK"
+	@echo "  make sdk-go                               - Generate Go SDK"
+	@echo "  make sdk-java                             - Generate Java SDK"
+	@echo "  make sdk-rust                             - Generate Rust SDK"
 	@echo ""
 	@echo "DOCKER OPERATIONS & HOUSEKEEPING:"
 	@echo "  make hooks                                - Install git pre-commit quality hooks"
@@ -114,12 +119,50 @@ ui:
 openapi:
 	cargo test --test openapi_contract_tests
 
-sdk:
+sdk: sdk-all
+
+sdk-all:
 	@if command -v fern &> /dev/null; then \
-		fern generate; \
+		fern generate --group local; \
 	else \
-		echo "ℹ️ Fern CLI not found. Install via 'npm install -g fern-api' or run via 'npx fern generate'"; \
-		npx fern generate; \
+		npx fern generate --group local; \
+	fi
+
+sdk-ts: sdk-typescript
+sdk-typescript:
+	@if command -v fern &> /dev/null; then \
+		fern generate --group ts; \
+	else \
+		npx fern generate --group ts; \
+	fi
+
+sdk-py: sdk-python
+sdk-python:
+	@if command -v fern &> /dev/null; then \
+		fern generate --group python; \
+	else \
+		npx fern generate --group python; \
+	fi
+
+sdk-go:
+	@if command -v fern &> /dev/null; then \
+		fern generate --group go; \
+	else \
+		npx fern generate --group go; \
+	fi
+
+sdk-java:
+	@if command -v fern &> /dev/null; then \
+		fern generate --group java; \
+	else \
+		npx fern generate --group java; \
+	fi
+
+sdk-rust:
+	@if command -v fern &> /dev/null; then \
+		fern generate --group rust; \
+	else \
+		npx fern generate --group rust; \
 	fi
 
 # Operations & Housekeeping Targets
