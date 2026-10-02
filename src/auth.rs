@@ -184,10 +184,21 @@ pub struct AuthResponse {
 }
 
 /// Returns the RSA 2048 private key PEM for signing RS256 tokens.
+///
+/// ⚠️ **LOCAL DEVELOPMENT ONLY**:
+/// Reading key material from file paths (`LOCAL_DEV_RSA_PRIVATE_KEY_FILE` / `.keys/rsa_private.pem`) or
+/// falling back to in-memory ephemeral keys is strictly intended for local dev and testing.
+///
+/// **Production Security**:
+/// Production services MUST NOT load private key files from disk. Instead, key material
+/// should be managed securely via Secret Managers or Vaults (e.g. AWS Secrets Manager, HashiCorp Vault,
+/// GCP Secret Manager, Railway/Supabase secrets) and injected directly into the `RSA_PRIVATE_KEY`
+/// environment variable.
+///
 /// Resolution order:
-/// 1. Direct PEM string from `RSA_PRIVATE_KEY` environment variable.
-/// 2. File path from `RSA_PRIVATE_KEY_FILE` environment variable or `.keys/rsa_private.pem`.
-/// 3. Ephemeral in-memory RSA 2048 private key fallback.
+/// 1. Direct PEM string from `RSA_PRIVATE_KEY` environment variable (Production / Vault injection).
+/// 2. [LOCAL DEV ONLY] File path from `LOCAL_DEV_RSA_PRIVATE_KEY_FILE` (or fallback `RSA_PRIVATE_KEY_FILE`) environment variable or `.keys/rsa_private.pem`.
+/// 3. [LOCAL DEV ONLY] Ephemeral in-memory RSA 2048 private key fallback.
 pub fn get_rsa_private_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PRIVATE_KEY") {
         if !pem.trim().is_empty() {
@@ -195,22 +206,37 @@ pub fn get_rsa_private_key_pem() -> String {
         }
     }
 
-    let file_path = std::env::var("RSA_PRIVATE_KEY_FILE")
+    let file_path = std::env::var("LOCAL_DEV_RSA_PRIVATE_KEY_FILE")
+        .or_else(|_| std::env::var("RSA_PRIVATE_KEY_FILE"))
         .unwrap_or_else(|_| ".keys/rsa_private.pem".to_string());
     if let Ok(contents) = std::fs::read_to_string(&file_path) {
         if !contents.trim().is_empty() {
+            tracing::debug!(
+                "Loaded RSA private key from local dev file path: {}",
+                file_path
+            );
             return contents;
         }
     }
 
+    tracing::debug!("Using ephemeral in-memory RSA private key fallback (Local Dev Only)");
     get_ephemeral_key_pair().private_pem.clone()
 }
 
 /// Returns the RSA 2048 public key PEM for verifying RS256 signatures.
+///
+/// ⚠️ **LOCAL DEVELOPMENT ONLY**:
+/// Reading key material from file paths (`LOCAL_DEV_RSA_PUBLIC_KEY_FILE` / `.keys/rsa_public.pem`) or
+/// falling back to in-memory ephemeral keys is strictly intended for local dev and testing.
+///
+/// **Production Security**:
+/// Production services MUST NOT load public key files from disk. Instead, public key material
+/// should be injected directly via the `RSA_PUBLIC_KEY` environment variable or retrieved from JWKS / Vault.
+///
 /// Resolution order:
-/// 1. Direct PEM string from `RSA_PUBLIC_KEY` environment variable.
-/// 2. File path from `RSA_PUBLIC_KEY_FILE` environment variable or `.keys/rsa_public.pem`.
-/// 3. Ephemeral in-memory RSA 2048 public key fallback.
+/// 1. Direct PEM string from `RSA_PUBLIC_KEY` environment variable (Production / Vault injection).
+/// 2. [LOCAL DEV ONLY] File path from `LOCAL_DEV_RSA_PUBLIC_KEY_FILE` (or fallback `RSA_PUBLIC_KEY_FILE`) environment variable or `.keys/rsa_public.pem`.
+/// 3. [LOCAL DEV ONLY] Ephemeral in-memory RSA 2048 public key fallback.
 pub fn get_rsa_public_key_pem() -> String {
     if let Ok(pem) = std::env::var("RSA_PUBLIC_KEY") {
         if !pem.trim().is_empty() {
@@ -218,14 +244,20 @@ pub fn get_rsa_public_key_pem() -> String {
         }
     }
 
-    let file_path =
-        std::env::var("RSA_PUBLIC_KEY_FILE").unwrap_or_else(|_| ".keys/rsa_public.pem".to_string());
+    let file_path = std::env::var("LOCAL_DEV_RSA_PUBLIC_KEY_FILE")
+        .or_else(|_| std::env::var("RSA_PUBLIC_KEY_FILE"))
+        .unwrap_or_else(|_| ".keys/rsa_public.pem".to_string());
     if let Ok(contents) = std::fs::read_to_string(&file_path) {
         if !contents.trim().is_empty() {
+            tracing::debug!(
+                "Loaded RSA public key from local dev file path: {}",
+                file_path
+            );
             return contents;
         }
     }
 
+    tracing::debug!("Using ephemeral in-memory RSA public key fallback (Local Dev Only)");
     get_ephemeral_key_pair().public_pem.clone()
 }
 

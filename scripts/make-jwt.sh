@@ -12,7 +12,7 @@ ROLE="${2:-admin}"
 TTL_SECONDS="${3:-86400}"
 
 KEYS_DIR="$DIR/.keys"
-PRIV_KEY="${RSA_PRIVATE_KEY_FILE:-$KEYS_DIR/rsa_private.pem}"
+PRIV_KEY="${LOCAL_DEV_RSA_PRIVATE_KEY_FILE:-${RSA_PRIVATE_KEY_FILE:-$KEYS_DIR/rsa_private.pem}}"
 
 echo "=========================================================="
 echo "🔑 Astrea SDA API - Local RS256 JWT Token Generator"
