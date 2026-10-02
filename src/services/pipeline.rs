@@ -291,7 +291,7 @@ impl DiscoveryPipeline {
         dtos
     }
 
-    /// Performs sync for a group and upserts results into SatelliteRepository
+    /// Performs sync for a group and upserts results into SatelliteRepository in 500-record transaction chunks
     pub async fn sync_group(
         repo: &SatelliteRepository,
         group: CelesTrakGroup,
@@ -299,57 +299,61 @@ impl DiscoveryPipeline {
         let dtos = Self::fetch_group_tle(group).await?;
         let total = dtos.len();
 
-        let existing_satellites = repo.list_satellites().await.unwrap_or_default();
-
-        for dto in dtos {
-            // Find existing satellite by name or NORAD ID match
-            let existing = existing_satellites
-                .iter()
-                .find(|s| s.name.eq_ignore_ascii_case(&dto.name));
-
-            if let Some(sat) = existing {
-                let update_dto = crate::models::UpdateSatelliteDto {
-                    name: Some(dto.name),
-                    line_one: Some(dto.line_one),
-                    line_two: Some(dto.line_two),
-                };
-                let _ = repo.update_satellite_by_id(sat.id, update_dto).await;
-            } else {
-                let _ = repo.create_satellite(dto).await;
-            }
-        }
+        // Perform batch upsert in 500-record transaction chunks with post-commit cache invalidation
+        let processed = repo
+            .batch_upsert_satellites(dtos, 500)
+            .await
+            .map_err(|e| format!("Batch upsert failed for group {}: {}", group.as_str(), e))?;
 
         info!(
-            "Successfully synced {} satellites for group {}",
-            total,
+            "Successfully synced {} satellites for group {} in 500-record transaction batches",
+            processed,
             group.as_str()
         );
         Ok(total)
     }
 
-    /// Starts a Tokio background worker that periodically syncs satellite discovery feeds
+    /// Starts a background worker on a dedicated low-priority OS thread with an isolated Tokio runtime
     pub fn start_background_sync(repo: SatelliteRepository, interval_hours: u64) {
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_hours * 3600));
-            // First tick completes immediately
-            interval.tick().await;
-
-            loop {
-                info!("Starting scheduled CelesTrak discovery pipeline sync...");
-                let groups = [
-                    CelesTrakGroup::Stations,
-                    CelesTrakGroup::Visual,
-                    CelesTrakGroup::Last30Days,
-                ];
-
-                for group in groups {
-                    if let Err(e) = Self::sync_group(&repo, group).await {
-                        error!("Failed discovery sync for group {}: {}", group.as_str(), e);
+        std::thread::Builder::new()
+            .name("ingestion-pipeline-worker".to_string())
+            .spawn(move || {
+                let rt = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .thread_name("ingestion-worker")
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        error!("Failed to build ingestion pipeline Tokio runtime: {}", e);
+                        return;
                     }
-                }
+                };
 
-                interval.tick().await;
-            }
-        });
+                rt.block_on(async move {
+                    let mut interval =
+                        tokio::time::interval(Duration::from_secs(interval_hours * 3600));
+                    // First tick completes immediately
+                    interval.tick().await;
+
+                    loop {
+                        info!("Starting scheduled CelesTrak discovery pipeline sync on dedicated worker thread...");
+                        let groups = [
+                            CelesTrakGroup::Stations,
+                            CelesTrakGroup::Visual,
+                            CelesTrakGroup::Last30Days,
+                        ];
+
+                        for group in groups {
+                            if let Err(e) = Self::sync_group(&repo, group).await {
+                                error!("Failed discovery sync for group {}: {}", group.as_str(), e);
+                            }
+                        }
+
+                        interval.tick().await;
+                    }
+                });
+            })
+            .expect("Failed to spawn ingestion pipeline background worker thread");
     }
 }

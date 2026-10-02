@@ -73,24 +73,31 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ---
 
-### Running with Docker
+---
 
-Build the Alpine container and mount your local `.keys/` directory (or pass `RSA_PRIVATE_KEY` / `RSA_PUBLIC_KEY` environment variables):
+### Running with Docker & Build Targets (`Makefile`)
+
+Astrea SDA API provides 3 simple build commands depending on your workflow. See **[DOCKER.md](DOCKER.md)** for detailed architecture.
+
+#### 1. Local Host Hot-Reload (`make build dev-hot`)
+Docker DNS/Nginx/Postgres/Redis stack routing custom domain requests (`https://astrealabs.local.com/sda/api/v1`) directly to your locally running host `cargo-watch` process for instant code reloads:
 
 ```bash
-# Build the Docker image
-docker build -t astrea-sda-api .
-
-# Generate your local custom RSA keypair if not already created
-./scripts/setup-keys.sh
-
-# Run the container mounting your local .keys directory
-docker run -p 8080:8080 -v "$(pwd)/.keys:/app/.keys:ro" astrea-sda-api
+make build dev-hot
 ```
 
-To generate matching RS256 tokens for the running container:
+#### 2. Containerized Local Dev (`make build dev`)
+Runs the full application stack inside Docker containers using `cargo-watch` with source volume mounts:
+
 ```bash
-./scripts/make-jwt.sh operator_user operator
+make build dev
+```
+
+#### 3. Production Deployable Image (`make build prod`)
+Builds an optimized, unprivileged production container image (`astrea-sda-api:latest`) with automated build verification tests:
+
+```bash
+make build prod
 ```
 
 ---

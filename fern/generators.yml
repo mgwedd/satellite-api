@@ -31,3 +31,38 @@ groups:
         output:
           location: local-file-system
           path: ../sdks/rust
+  ts:
+    generators:
+      - name: fernapi/fern-typescript-node-sdk
+        version: 3.98.2
+        output:
+          location: local-file-system
+          path: ../sdks/typescript
+  python:
+    generators:
+      - name: fernapi/fern-python-sdk
+        version: 5.34.2
+        output:
+          location: local-file-system
+          path: ../sdks/python
+  go:
+    generators:
+      - name: fernapi/fern-go-sdk
+        version: 1.64.2
+        output:
+          location: local-file-system
+          path: ../sdks/go
+  java:
+    generators:
+      - name: fernapi/fern-java-sdk
+        version: 3.38.1
+        output:
+          location: local-file-system
+          path: ../sdks/java
+  rust:
+    generators:
+      - name: fernapi/fern-rust-sdk
+        version: 0.49.1
+        output:
+          location: local-file-system
+          path: ../sdks/rust

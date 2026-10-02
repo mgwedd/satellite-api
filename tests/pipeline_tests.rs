@@ -77,3 +77,53 @@ fn test_parse_omm_json_response_with_6_digit_catalog_number() {
         elem_res.err()
     );
 }
+
+#[tokio::test]
+async fn test_chunked_batch_upsert_satellites() {
+    use astrea_sda_api::models::CreateSatelliteDto;
+    use astrea_sda_api::repository::SatelliteRepository;
+
+    let repo = SatelliteRepository::new(None).await;
+
+    // Create 1200 dummy satellite DTOs to test 500-record batch chunking
+    let mut dtos = Vec::with_capacity(1200);
+    for i in 1..=1200 {
+        dtos.push(CreateSatelliteDto {
+            name: format!("SAT_TEST_{:04}", i),
+            line_one: format!(
+                "1 {:05}U 21035A   21239.50000000  .00010000  00000-0  10000-3 0  9991",
+                i
+            ),
+            line_two: format!(
+                "2 {:05}  41.4700 120.0000 0005000 100.0000 260.0000 15.60000000012345",
+                i
+            ),
+        });
+    }
+
+    // Upsert in batches of 500
+    let count = repo.batch_upsert_satellites(dtos, 500).await.unwrap();
+    assert_eq!(count, 1200);
+
+    let list = repo.list_satellites().await.unwrap();
+    assert_eq!(list.len(), 1200);
+
+    // Verify updating an existing satellite via batch upsert
+    let update_dtos = vec![CreateSatelliteDto {
+        name: "SAT_TEST_0001".to_string(),
+        line_one: "1 00001U 21035A   21239.60000000  .00010000  00000-0  10000-3 0  9992"
+            .to_string(),
+        line_two: "2 00001  41.4700 120.0000 0005000 100.0000 260.0000 15.60000000012346"
+            .to_string(),
+    }];
+
+    let updated_count = repo
+        .batch_upsert_satellites(update_dtos, 500)
+        .await
+        .unwrap();
+    assert_eq!(updated_count, 1);
+
+    // Ensure size didn't increase
+    let list2 = repo.list_satellites().await.unwrap();
+    assert_eq!(list2.len(), 1200);
+}

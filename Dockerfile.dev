@@ -1,0 +1,17 @@
+# ==============================================================================
+# ASTREA SDA API - Containerized Development Dockerfile (Hot-Reloading)
+# ==============================================================================
+FROM rust:1-alpine
+
+WORKDIR /app
+
+# Install compilation tools, OpenSSL, and cargo-watch for hot-reloading
+RUN apk add --no-cache build-base musl-dev pkgconfig openssl-dev openssl-libs-static curl git && \
+    cargo install cargo-watch
+
+ENV HOST=0.0.0.0
+ENV PORT=8080
+EXPOSE 8080
+
+# Run server with live hot-reloading on source file changes
+CMD ["cargo", "watch", "-x", "run"]

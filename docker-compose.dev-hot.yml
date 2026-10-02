@@ -1,0 +1,81 @@
+name: astrea-sda-api-dev-hot
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # PostgreSQL Database (Exposed for Local Host Process)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: astrea-dev-hot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: astrea
+      POSTGRES_PASSWORD: astreadbpass
+      POSTGRES_DB: astrea_sda
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_hot_data:/var/lib/postgresql/data
+    networks:
+      - astrea-dev-hot-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U astrea -d astrea_sda"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Redis Cache (Exposed for Local Host Process)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: astrea-dev-hot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_hot_data:/data
+    networks:
+      - astrea-dev-hot-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Nginx Reverse Proxy (Routes astrealabs.local.com -> Host cargo-watch instance)
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: astrea-dev-hot-nginx
+    restart: unless-stopped
+    ports:
+      - "8888:80"
+      - "8443:443"
+      - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./nginx/nginx.conf.dev-hot:/etc/nginx/nginx.conf:ro
+      - ./.keys:/etc/nginx/certs:ro
+    networks:
+      - astrea-dev-hot-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+networks:
+  astrea-dev-hot-net:
+    driver: bridge
+    name: astrea-dev-hot-net
+
+volumes:
+  postgres_dev_hot_data:
+    name: astrea_postgres_dev_hot_data
+  redis_dev_hot_data:
+    name: astrea_redis_dev_hot_data
