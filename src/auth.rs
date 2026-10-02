@@ -169,6 +169,20 @@ pub struct LoginRequest {
     pub password: String,
 }
 
+/// Request body for RFC 7523 Private Key JWT Client Assertion token exchange (M2M authentication).
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientAssertionRequest {
+    /// OAuth 2.0 grant type (must be "client_credentials" or "urn:ietf:params:oauth:grant-type:jwt-bearer")
+    pub grant_type: String,
+    /// Client assertion type (must be "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+    pub client_assertion_type: String,
+    /// RS256-signed JWT assertion token generated using client's RSA private key
+    pub client_assertion: String,
+    /// Optional requested OAuth 2.0 scope
+    pub scope: Option<String>,
+}
+
 /// Response returned upon successful RS256 JWT token generation.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

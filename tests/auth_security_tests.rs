@@ -278,3 +278,40 @@ async fn test_auth_security_case_insensitive_bearer_header() {
         "Case-insensitive 'bearer' prefix must be accepted per RFC 6750"
     );
 }
+
+#[tokio::test]
+async fn test_auth_security_m2m_client_assertion_token_exchange() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    let (assertion_token, _) = create_jwt_token("m2m_telemetry_worker", "editor", 300).unwrap();
+
+    let token_exchange_payload = json!({
+        "grantType": "client_credentials",
+        "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "clientAssertion": assertion_token
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/auth/token")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&token_exchange_payload).unwrap(),
+        ))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "RFC 7523 M2M Client Assertion Token Exchange must succeed and issue Bearer token"
+    );
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let auth_res: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(auth_res["token"].is_string());
+    assert_eq!(auth_res["claims"]["sub"], "m2m_telemetry_worker");
+}

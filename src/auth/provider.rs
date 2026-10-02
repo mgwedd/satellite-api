@@ -1,5 +1,6 @@
 use crate::auth::{
-    create_jwt_token_full, decode_jwt_token, AuthResponse, Claims, LoginRequest, SignupRequest,
+    create_jwt_token_full, decode_jwt_token, AuthResponse, Claims, ClientAssertionRequest,
+    LoginRequest, SignupRequest,
 };
 use crate::error::AppError;
 use axum::async_trait;
@@ -12,6 +13,10 @@ use std::sync::{Arc, RwLock};
 pub trait AuthProvider: Send + Sync {
     async fn signup(&self, req: &SignupRequest) -> Result<AuthResponse, AppError>;
     async fn login(&self, req: &LoginRequest) -> Result<AuthResponse, AppError>;
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+    ) -> Result<AuthResponse, AppError>;
     async fn verify_token(&self, token: &str) -> Result<Claims, AppError>;
 }
 
@@ -143,6 +148,55 @@ impl AuthProvider for MemoryAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
+            claims,
+        })
+    }
+
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some("astrea-sda-api".to_string()),
+            Some("astrea-sda-api".to_string()),
+            Some(scope),
             ttl_seconds,
         )?;
 
@@ -331,6 +385,55 @@ impl AuthProvider for SupabaseAuthProvider {
         })
     }
 
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some(self.supabase_url.clone()),
+            Some("authenticated".to_string()),
+            Some(scope),
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
+            claims,
+        })
+    }
+
     async fn verify_token(&self, token: &str) -> Result<Claims, AppError> {
         decode_jwt_token(token)
     }
@@ -456,6 +559,55 @@ impl AuthProvider for PostgresAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
+            claims,
+        })
+    }
+
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some("astrea-sda-api".to_string()),
+            Some("astrea-sda-api".to_string()),
+            Some(scope),
             ttl_seconds,
         )?;
 

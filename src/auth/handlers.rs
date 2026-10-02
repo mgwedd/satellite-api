@@ -1,5 +1,5 @@
 use crate::auth::provider::AuthProvider;
-use crate::auth::{AuthResponse, Claims, LoginRequest, SignupRequest};
+use crate::auth::{AuthResponse, Claims, ClientAssertionRequest, LoginRequest, SignupRequest};
 use crate::error::AppError;
 use axum::{extract::State, Json};
 use std::sync::Arc;
@@ -45,6 +45,29 @@ pub async fn login_handler(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
     let res = provider.login(&payload).await?;
+    Ok(Json(res))
+}
+
+/// RFC 7523 Private Key JWT Client Assertion M2M Token Exchange
+///
+/// Authenticates machine-to-machine service accounts via signed RSA Private Key assertions (`client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`) and returns a scoped RS256 JWT Bearer token.
+#[utoipa::path(
+    post,
+    path = "/v1/auth/token",
+    operation_id = "tokenExchangeHandler",
+    request_body = ClientAssertionRequest,
+    responses(
+        (status = 200, description = "M2M Client assertion verified and JWT Bearer token issued", body = AuthResponse),
+        (status = 400, description = "Invalid client assertion format or unsupported grant type", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - Invalid assertion signature or expired timestamp", body = ErrorResponse)
+    ),
+    tag = "Authentication"
+)]
+pub async fn token_exchange_handler(
+    State(provider): State<Arc<dyn AuthProvider>>,
+    Json(payload): Json<ClientAssertionRequest>,
+) -> Result<Json<AuthResponse>, AppError> {
+    let res = provider.client_assertion_token_exchange(&payload).await?;
     Ok(Json(res))
 }
 

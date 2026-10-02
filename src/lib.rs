@@ -40,6 +40,7 @@ impl Modify for SecurityAddon {
     paths(
         auth::signup_handler,
         auth::login_handler,
+        auth::token_exchange_handler,
         auth::me_handler,
         handlers::satellite_handler::create_satellite,
         handlers::satellite_handler::list_satellites,
@@ -64,6 +65,7 @@ impl Modify for SecurityAddon {
             auth::Claims,
             auth::SignupRequest,
             auth::LoginRequest,
+            auth::ClientAssertionRequest,
             auth::AuthResponse,
             models::Satellite,
             models::Tle,
@@ -137,6 +139,7 @@ pub fn create_router_with_auth(
     let auth_routes = Router::new()
         .route("/signup", post(auth::signup_handler))
         .route("/login", post(auth::login_handler))
+        .route("/token", post(auth::token_exchange_handler))
         .route("/me", get(auth::me_handler))
         .with_state(auth_provider);
 
