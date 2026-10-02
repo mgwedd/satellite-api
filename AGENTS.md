@@ -1,9 +1,5 @@
 # 🤖 Astrea SDA API — Agent Operating Directives
 
-Targeted instructions, domain invariants, and project constraints that cannot be inferred from base model training.
-
----
-
 ## 1. 🛡️ Verification Gate & PR Rules
 
 - **Zero-Warning Verification**: Before submitting or declaring a task complete, run:
