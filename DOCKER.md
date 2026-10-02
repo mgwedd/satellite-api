@@ -49,10 +49,14 @@ docker compose up -d
 ./scripts/docker-prod.sh
 ```
 
-- **Nginx Gateway**: `http://localhost:8888`
+- **HTTPS Custom Domain Gateway**: `https://astrealabs.local.com/sda/api/v1` (or `https://localhost:8443/sda/api/v1`)
+- **HTTP Gateway**: `http://localhost:8888`
 - **Direct API Server**: `http://localhost:8880`
 - **Swagger UI Playground**: `http://localhost:8880/swagger-ui`
-- **Health Check**: `curl -f http://localhost:8888/nginx-health`
+- **Health Check**: `curl -k -f https://localhost:8443/nginx-health`
+
+> 💡 **Custom Local Domain Setup (`astrealabs.local.com`)**:
+> To test custom domain routing locally, add `127.0.0.1 astrealabs.local.com` to your `/etc/hosts` file. Nginx automatically terminates TLS using the self-signed certificate in `.keys/dev-tls.crt` and routes `/sda/api/v1` to the underlying API container.
 
 ---
 
