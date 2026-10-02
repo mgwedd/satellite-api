@@ -35,6 +35,7 @@ utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
 moka = { version = "0.12", features = ["future"] }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager", "tokio-native-tls-comp"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+postgrest = "1.6"
 
 [dev-dependencies]
 cargo-husky = { version = "1.5", default-features = false, features = ["user-hooks"] }
