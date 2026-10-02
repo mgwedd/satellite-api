@@ -6,7 +6,7 @@
 USER ?= admin_user
 ROLE ?= admin
 
-.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk hooks logs stop clean build-dev-hot build-dev build-prod
+.PHONY: help build dev-hot dev prod check fmt lint test test-watch keys jwt ui openapi sdk hooks install logs stop clean build-dev-hot build-dev build-prod
 
 help:
 	@echo "=============================================================================="
@@ -16,6 +16,7 @@ help:
 	@echo "  make dev-hot      (or make build dev-hot) - Docker DNS/Nginx stack with local host app hot-reload"
 	@echo "  make dev          (or make build dev)     - Fully containerized local dev stack (cargo-watch in Docker)"
 	@echo "  make prod         (or make build prod)    - Build optimized production container image (with build tests)"
+	@echo "  make install                              - Install binary locally into ~/.cargo/bin with keys & hooks"
 	@echo ""
 	@echo "CODE QUALITY & TESTING:"
 	@echo "  make check                                - Run fast offline compilation check"
@@ -54,6 +55,11 @@ dev:
 
 prod:
 	@./scripts/docker-build.sh
+
+install: keys hooks
+	@echo "Installing astrea-sda-api binary locally..."
+	cargo install --path .
+	@echo "✅ Installed astrea-sda-api binary into ~/.cargo/bin/astrea-sda-api"
 
 build-dev-hot: dev-hot
 build-dev: dev
