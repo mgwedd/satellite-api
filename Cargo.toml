@@ -25,6 +25,9 @@ base64 = "0.21"
 jsonwebtoken = "9.2"
 rsa = { version = "0.9", features = ["pem"] }
 rand = "0.8"
+dashmap = "=5.5.3"
+tokio-util = "0.7"
+
 
 
 # OpenAPI & Documentation toolchain
@@ -35,6 +38,7 @@ utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
 moka = { version = "0.12", features = ["future"] }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager", "tokio-native-tls-comp"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+deadpool-redis = "0.14"
 postgrest = "1.6"
 tiered-cache = "0.1.6"
 

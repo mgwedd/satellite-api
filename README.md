@@ -373,6 +373,15 @@ cargo test --test openapi_contract_tests
 
 ---
 
+## 🤝 Contributing & Community
+
+We welcome open-source contributions! Please review our community standards before opening a PR:
+- 📖 [**Contributing Guidelines**](CONTRIBUTING.md) — Proof-First engineering, breaking changes & coding agent standards.
+- 📜 [**Code of Conduct**](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1 standards.
+- 🔒 [**Security Policy**](SECURITY.md) — Vulnerability reporting & security practices.
+
+---
+
 ## 📄 License
 
 Licensed under either of:
@@ -381,3 +390,4 @@ Licensed under either of:
 * MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
