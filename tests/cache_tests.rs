@@ -30,3 +30,44 @@ async fn test_tiered_cache_l1_hit_and_invalidation() {
     let fetch_res = repo.get_satellite_by_id(created.id).await;
     assert!(fetch_res.is_err());
 }
+
+#[tokio::test]
+async fn test_l1_l2_single_flight_coalescing_funnel() {
+    use astrea_sda_api::cache::TieredCache;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let cache = TieredCache::new(None, Duration::from_secs(60)).await;
+    let fetch_counter = Arc::new(AtomicUsize::new(0));
+
+    // Spawn 100 concurrent tasks requesting the exact same cold cache key
+    let mut handles = Vec::new();
+    for _ in 0..100 {
+        let cache_clone = cache.clone();
+        let counter_clone = fetch_counter.clone();
+
+        handles.push(tokio::spawn(async move {
+            cache_clone
+                .get_or_insert_with::<String, _, _>("coalesced_key", || async move {
+                    // Simulate a slow DB query / heavy calculation
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    counter_clone.fetch_add(1, Ordering::SeqCst);
+                    Ok("coalesced_result".to_string())
+                })
+                .await
+        }));
+    }
+
+    for h in handles {
+        let res = h.await.unwrap();
+        assert_eq!(res.unwrap(), "coalesced_result");
+    }
+
+    // Crucial Coalescing Assertion: Exactly 1 fetch executed despite 100 concurrent requests!
+    assert_eq!(
+        fetch_counter.load(Ordering::SeqCst),
+        1,
+        "Expected exactly 1 execution of the fallback function due to single-flight coalescing"
+    );
+}

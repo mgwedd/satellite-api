@@ -62,55 +62,59 @@ impl TieredCache {
         }
     }
 
-    /// Fetches a value from L1 (Memory) or L2 (Redis). If miss, calls fallback function and populates cache.
+    /// Fetches a value from L1 (Memory) or L2 (Redis).
+    ///
+    /// Implements the **L1/L2 Coalescing Funnel**:
+    /// Concurrent requests for the same key are coalesced in memory by Moka (`try_get_with`).
+    /// Exactly one request checks L2 Redis; if Redis misses, only that single request executes the fallback function.
     pub async fn get_or_insert_with<T, F, Fut>(&self, key: &str, fetch_fn: F) -> Result<T, String>
     where
         T: Serialize + DeserializeOwned + Clone,
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<T, String>>,
     {
-        // 1. Check L1 In-Memory Cache
-        if let Some(cached_json) = self.l1_cache.get(key).await {
-            if let Ok(val) = serde_json::from_str::<T>(&cached_json) {
-                debug!("L1 Memory Cache HIT for key: {}", key);
-                return Ok(val);
-            }
-        }
+        let l2_redis = self.l2_redis.clone();
+        let default_ttl = self.default_ttl;
+        let key_str = key.to_string();
 
-        // 2. Check L2 Redis Cache (if configured)
-        if let Some(mut redis_conn) = self.l2_redis.clone() {
-            let redis_res: Result<Option<String>, redis::RedisError> = redis_conn.get(key).await;
-            if let Ok(Some(cached_json)) = redis_res {
-                if let Ok(val) = serde_json::from_str::<T>(&cached_json) {
-                    debug!("L2 Redis Cache HIT for key: {}", key);
-                    // Populate L1 cache
-                    self.l1_cache.insert(key.to_string(), cached_json).await;
-                    return Ok(val);
+        let json_result = self
+            .l1_cache
+            .try_get_with(key_str.clone(), async move {
+                // 1. Check L2 Redis Cache (Single coalesced request executes network IO to Redis)
+                if let Some(mut redis_conn) = l2_redis.clone() {
+                    let redis_res: Result<Option<String>, redis::RedisError> =
+                        redis_conn.get(&key_str).await;
+                    if let Ok(Some(cached_json)) = redis_res {
+                        debug!("L2 Redis Cache HIT (coalesced) for key: {}", key_str);
+                        return Ok(cached_json);
+                    }
                 }
-            }
-        }
 
-        // 3. Cache MISS -> Fetch from underlying source (DB / Service)
-        debug!("Cache MISS for key: {}. Fetching from source...", key);
-        let val = fetch_fn().await?;
-        let json_str = serde_json::to_string(&val).map_err(|e| e.to_string())?;
+                // 2. L2 Cache MISS -> Execute DB query or Rayon computation fallback
+                debug!(
+                    "Cache MISS (coalesced). Fetching from source for key: {}",
+                    key_str
+                );
+                let val = fetch_fn().await?;
+                let json_str = serde_json::to_string(&val).map_err(|e| e.to_string())?;
 
-        // Populate L1 Memory Cache
-        self.l1_cache
-            .insert(key.to_string(), json_str.clone())
-            .await;
+                // 3. Populate L2 Redis Cache asynchronously (fire-and-forget)
+                if let Some(mut redis_conn) = l2_redis {
+                    let k = key_str.clone();
+                    let payload = json_str.clone();
+                    let ttl_secs = default_ttl.as_secs();
+                    tokio::spawn(async move {
+                        let _: Result<(), redis::RedisError> =
+                            redis_conn.set_ex(k, payload, ttl_secs).await;
+                    });
+                }
 
-        // Populate L2 Redis Cache (async fire-and-forget)
-        if let Some(mut redis_conn) = self.l2_redis.clone() {
-            let key_str = key.to_string();
-            let ttl_secs = self.default_ttl.as_secs();
-            tokio::spawn(async move {
-                let _: Result<(), redis::RedisError> =
-                    redis_conn.set_ex(key_str, json_str, ttl_secs).await;
-            });
-        }
+                Ok(json_str)
+            })
+            .await
+            .map_err(|e: std::sync::Arc<String>| e.as_ref().clone())?;
 
-        Ok(val)
+        serde_json::from_str::<T>(&json_result).map_err(|e| e.to_string())
     }
 
     /// Invalidates a key across both L1 and L2 caches
