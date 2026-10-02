@@ -115,29 +115,12 @@ Set environment variables to customize runtime behavior:
 
 ---
 
-## 🛰️ Core API Endpoints
+## 🛰️ Explore the API Endpoints
 
-All endpoints are versioned under `/v1`.
+[![Interactive OpenAPI Docs](https://img.shields.io/badge/Interactive_OpenAPI_Docs-GitHub_Pages-blue?style=for-the-badge&logo=openapi-initiative&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/)
+[![OpenAPI 3.0 Spec](https://img.shields.io/badge/OpenAPI_3.0_Spec-JSON-green?style=for-the-badge&logo=json&logoColor=white)](https://mgwedd.github.io/astrea-sda-api/openapi.json)
 
-| HTTP Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/v1/satellites` | List satellites with checkpoint cursor pagination (`limit`, `cursor`) |
-| `POST` | `/v1/satellites` | Create satellite record with TLE data |
-| `GET` | `/v1/satellites/:id` | Fetch satellite details by UUID |
-| `PATCH` | `/v1/satellites/:id` | Update satellite metadata or TLE elements |
-| `DELETE` | `/v1/satellites/:id` | Delete satellite record |
-| `GET` | `/v1/astrodynamics/overhead` | Find all satellites currently above observer elevation threshold |
-| `GET` | `/v1/satellites/:id/next-visible` | Compute next visible ground pass for a specific satellite |
-| `GET` | `/v1/satellites/:id/groundtrack` | Compute 3D ECF trajectory, geodetic path, and GeoJSON footprint line |
-| `POST` | `/v1/pipelines/sync` | Trigger CelesTrak TLE dataset sync (group: `stations`, `visual`, `starlink`, etc.) |
-| `POST` | `/v1/auth/login` | Authenticate developer account & acquire RS256/Supabase JWT Bearer token |
-| `POST` | `/v1/auth/signup` | Register developer account & acquire RS256/Supabase JWT Bearer token |
-| `GET` | `/` | Root redirect to Swagger UI |
-| `GET` | `/swagger-ui` | Interactive Swagger UI API documentation playground |
-| `GET` | `/docs` | Redoc interactive API reference document |
-| `GET` | `/api-docs/openapi.json` | OpenAPI 3.0 JSON Specification |
-
----
+The complete interactive specification, request playgrounds, and schema contracts are hosted on **[GitHub Pages](https://mgwedd.github.io/astrea-sda-api/)**.
 
 ## 🌐 Interactive UI & API Explorer
 
