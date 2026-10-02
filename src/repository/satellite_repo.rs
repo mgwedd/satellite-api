@@ -175,4 +175,23 @@ impl SatelliteRepository {
     pub async fn add_tle_history(&self, satellite_id: Uuid, tle: Tle) -> Result<(), AppError> {
         self.provider.add_tle_history(satellite_id, tle).await
     }
+
+    pub async fn batch_upsert_satellites(
+        &self,
+        dtos: Vec<CreateSatelliteDto>,
+        chunk_size: usize,
+    ) -> Result<usize, AppError> {
+        let mut total = 0;
+        let batch_size = if chunk_size == 0 { 500 } else { chunk_size };
+        for chunk in dtos.chunks(batch_size) {
+            let count = self
+                .provider
+                .batch_upsert_satellites(chunk.to_vec())
+                .await?;
+            total += count;
+            // Cache invalidation takes place AFTER successful transaction commit per batch chunk
+            self.cache.invalidate("satellites:list").await;
+        }
+        Ok(total)
+    }
 }
