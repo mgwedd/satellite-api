@@ -146,34 +146,131 @@ Customize runtime behavior via `.env` or container environment variables:
 Production-ready SDKs are generated directly from the OpenAPI schema using [Fern](https://buildwithfern.com/):
 
 ```bash
-# Generate SDKs locally for testing
+# Generate all SDKs locally (or target individually: make sdk-ts, sdk-py, sdk-go, sdk-java, sdk-rust)
 make sdk
-# Or target individual languages:
-make sdk-ts && make sdk-py && make sdk-go && make sdk-rust
 ```
 
+Each language below demonstrates **(1)** dynamic token fetching via RFC 7523 Private Key Client Assertion (PK JWTCA), **(2)** SDK client initialization, and **(3)** an example first call.
+
+#### TypeScript / Node.js
 ```typescript
-// TypeScript SDK Quickstart
 import { AstreaSdaApiClient } from "./sdks/typescript";
 
-const client = new AstreaSdaApiClient({
-  environment: "https://sda.localtest.me:8443",
-  token: process.env.ASTREA_BEARER_TOKEN
-});
+// 1. Fetch dynamic token via PK JWTCA
+const { token } = await fetch("https://sda.localtest.me:8443/v1/auth/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    grantType: "client_credentials",
+    clientAssertionType: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    clientAssertion: process.env.ASTREA_CLIENT_ASSERTION // Signed RS256 assertion
+  })
+}).then(res => res.json());
 
-const satellites = await client.satellites.listSatellites({ limit: 10 });
+// 2. Initialize SDK client & 3. First call
+const client = new AstreaSdaApiClient({ environment: "https://sda.localtest.me:8443", token });
+const satellites = await client.satellites.listSatellites({ limit: 5 });
 ```
 
+#### Python
 ```python
-# Python SDK Quickstart
+import os, requests
 from sdks.python import AstreaSdaApiClient
 
-client = AstreaSdaApiClient(
-    base_url="https://sda.localtest.me:8443",
-    token=os.environ["ASTREA_BEARER_TOKEN"]
+# 1. Fetch dynamic token via PK JWTCA
+res = requests.post("https://sda.localtest.me:8443/v1/auth/token", json={
+    "grantType": "client_credentials",
+    "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    "clientAssertion": os.environ["ASTREA_CLIENT_ASSERTION"]
+}).json()
+
+# 2. Initialize SDK client & 3. First call
+client = AstreaSdaApiClient(base_url="https://sda.localtest.me:8443", token=res["token"])
+satellites = client.satellites.list_satellites(limit=5)
+```
+
+#### Go
+```go
+package main
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "net/http"
+    "os"
+    "sdks/go/client"
 )
 
-satellites = client.satellites.list_satellites(limit=10)
+func main() {
+    // 1. Fetch dynamic token via PK JWTCA
+    payload, _ := json.Marshal(map[string]string{
+        "grantType":           "client_credentials",
+        "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "clientAssertion":     os.Getenv("ASTREA_CLIENT_ASSERTION"),
+    })
+    resp, _ := http.Post("https://sda.localtest.me:8443/v1/auth/token", "application/json", bytes.NewBuffer(payload))
+    var auth struct{ Token string `json:"token"` }
+    json.NewDecoder(resp.Body).Decode(&auth)
+
+    // 2. Initialize SDK client & 3. First call
+    sdk := client.NewClient(client.WithBaseURL("https://sda.localtest.me:8443"), client.WithToken(auth.Token))
+    limit := 5
+    satellites, _ := sdk.Satellites.ListSatellites(context.Background(), &client.ListSatellitesRequest{Limit: &limit})
+}
+```
+
+#### Java
+```java
+import com.astrea.sda.AstreaSdaApiClient;
+import java.net.URI;
+import java.net.http.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        // 1. Fetch dynamic token via PK JWTCA
+        String body = """
+            {"grantType":"client_credentials","clientAssertionType":"urn:ietf:params:oauth:client-assertion-type:jwt-bearer","clientAssertion":"%s"}
+            """.formatted(System.getenv("ASTREA_CLIENT_ASSERTION"));
+
+        HttpClient http = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create("https://sda.localtest.me:8443/v1/auth/token"))
+            .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+        String token = new ObjectMapper().readTree(http.send(req, HttpResponse.BodyHandlers.ofString()).body()).get("token").asText();
+
+        // 2. Initialize SDK client & 3. First call
+        AstreaSdaApiClient client = AstreaSdaApiClient.builder().url("https://sda.localtest.me:8443").token(token).build();
+        var satellites = client.satellites().listSatellites();
+    }
+}
+```
+
+#### Rust
+```rust
+use astrea_sda_api_sdk::AstreaSdaApiClient;
+use serde_json::Value;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Fetch dynamic token via PK JWTCA
+    let auth: Value = reqwest::Client::new()
+        .post("https://sda.localtest.me:8443/v1/auth/token")
+        .json(&serde_json::json!({
+            "grantType": "client_credentials",
+            "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "clientAssertion": std::env::var("ASTREA_CLIENT_ASSERTION")?
+        }))
+        .send().await?.json().await?;
+
+    // 2. Initialize SDK client & 3. First call
+    let client = AstreaSdaApiClient::builder()
+        .base_url("https://sda.localtest.me:8443")
+        .bearer_token(auth["token"].as_str().ok_or("missing token")?)
+        .build()?;
+    let satellites = client.satellites().list_satellites().limit(5).send().await?;
+    Ok(())
+}
 ```
 
 ---
