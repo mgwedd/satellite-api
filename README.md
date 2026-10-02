@@ -169,29 +169,29 @@ open api-docs/index.html
 
 ### 1. List Satellites (Paginated)
 ```bash
-curl -s "http://localhost:8080/v1/satellites?limit=5" | jq
+curl -s "https://astrealabs.local.com/sda/api/v1/satellites?limit=5" | jq
 ```
 
 ### 2. Generate 3D Ground Track & GeoJSON Trajectory
 ```bash
-curl -s "http://localhost:8080/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
+curl -s "https://astrealabs.local.com/sda/api/v1/satellites/<SATELLITE_UUID>/groundtrack?duration_minutes=90&step_seconds=30&format=geojson" | jq
 ```
 
 ### 3. Find Overhead Satellites for Observer Location
 Query satellites visible from San Francisco (`lat=37.7749`, `lon=-122.4194`, `alt=150`m):
 ```bash
-curl -s "http://localhost:8080/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
+curl -s "https://astrealabs.local.com/sda/api/v1/astrodynamics/overhead?lat=37.7749&lon=-122.4194&alt=150" | jq
 ```
 
 ### 4. Compute Next Visible Pass for Satellite
 ```bash
-curl -s "http://localhost:8080/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
+curl -s "https://astrealabs.local.com/sda/api/v1/satellites/<SATELLITE_UUID>/next-visible?lat=37.7749&lon=-122.4194&threshold_deg=10" | jq
 ```
 
 ### 5. Trigger Manual CelesTrak Sync
 Sync space station TLE data:
 ```bash
-curl -X POST "http://localhost:8080/v1/pipelines/sync?group=stations" | jq
+curl -X POST "https://astrealabs.local.com/sda/api/v1/pipelines/sync?group=stations" | jq
 ```
 
 ---
@@ -222,7 +222,7 @@ SDK clients authenticate dynamically via `/v1/auth/login` or `/v1/auth/signup` t
 For automated background services, microservices, and satellite ingest pipelines, Astrea SDA API supports RFC 7523 Machine-to-Machine authentication. Services sign a client assertion payload with their private RSA key and exchange it for a scoped Bearer token without transmitting static shared secrets:
 
 ```bash
-curl -X POST "http://localhost:8080/v1/auth/token" \
+curl -X POST "https://astrealabs.local.com/sda/api/v1/auth/token" \
   -H "Content-Type: application/json" \
   -d '{
     "grantType": "client_credentials",
@@ -251,7 +251,7 @@ In production applications, client applications authenticate dynamically at star
 import { AstreaSdaApiClient } from "./sdks/typescript";
 
 // 1. Authenticate at application startup via Auth Provider
-const authResponse = await fetch("http://localhost:8080/v1/auth/login", {
+const authResponse = await fetch("https://astrealabs.local.com/sda/api/v1/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ email: "operator@example.com", password: process.env.OPERATOR_PASSWORD })
@@ -260,7 +260,7 @@ const authResponse = await fetch("http://localhost:8080/v1/auth/login", {
 // 2. Initialize SDK client with the dynamically acquired JWT Bearer token (or M2M assertion token)
 const client = new AstreaSdaApiClient({
   token: authResponse.token,
-  environment: "http://localhost:8080"
+  environment: "https://astrealabs.local.com/sda/api"
 });
 
 // 3. Execute authenticated operations
@@ -279,14 +279,14 @@ from sdks.python import AstreaSdaApiClient
 
 # 1. Authenticate at application startup via Auth Provider
 auth_response = requests.post(
-    "http://localhost:8080/v1/auth/login",
+    "https://astrealabs.local.com/sda/api/v1/auth/login",
     json={"email": "operator@example.com", "password": os.environ["OPERATOR_PASSWORD"]}
 ).json()
 
 # 2. Initialize SDK client with the dynamically acquired JWT Bearer token
 client = AstreaSdaApiClient(
     token=auth_response["token"],
-    base_url="http://localhost:8080"
+    base_url="https://astrealabs.local.com/sda/api"
 )
 
 # 3. Execute authenticated operations
@@ -315,7 +315,7 @@ func main() {
         "email":    "operator@example.com",
         "password": os.Getenv("OPERATOR_PASSWORD"),
     })
-    resp, _ := http.Post("http://localhost:8080/v1/auth/login", "application/json", bytes.NewBuffer(payload))
+    resp, _ := http.Post("https://astrealabs.local.com/sda/api/v1/auth/login", "application/json", bytes.NewBuffer(payload))
     var authResp struct {
         Token string `json:"token"`
     }
@@ -324,7 +324,7 @@ func main() {
     // 2. Initialize SDK client with dynamically acquired JWT token
     sdk := client.NewClient(
         client.WithToken(authResp.Token),
-        client.WithBaseURL("http://localhost:8080"),
+        client.WithBaseURL("https://astrealabs.local.com/sda/api"),
     )
 }
 ```
@@ -336,7 +336,7 @@ use astrea_sda_api_sdk::AstreaSdaApiClient;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AstreaSdaApiClient::builder()
-        .base_url("http://localhost:8080")
+        .base_url("https://astrealabs.local.com/sda/api")
         .bearer_token(std::env::var("ASTREA_BEARER_TOKEN")?)
         .build()?;
     Ok(())
