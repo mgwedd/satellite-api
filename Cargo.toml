@@ -27,7 +27,7 @@ rsa = { version = "0.9", features = ["pem"] }
 rand = "0.8"
 dashmap = "=5.5.3"
 tokio-util = "0.7"
-
+async-trait = "0.1"
 
 
 # OpenAPI & Documentation toolchain

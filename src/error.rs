@@ -33,6 +33,9 @@ pub enum AppError {
 
     #[error("Forbidden: {0}")]
     Forbidden(String),
+
+    #[error("Too Many Requests: {0}")]
+    TooManyRequests(String),
 }
 
 impl IntoResponse for AppError {
@@ -46,6 +49,7 @@ impl IntoResponse for AppError {
             }
             AppError::Unauthorized(ref msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             AppError::Forbidden(ref msg) => (StatusCode::FORBIDDEN, msg.clone()),
+            AppError::TooManyRequests(ref msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
         };
 
         let body = Json(ErrorResponse {
