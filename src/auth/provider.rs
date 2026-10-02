@@ -1,6 +1,7 @@
-use crate::auth::{
-    create_jwt_token_full, decode_jwt_token, AuthResponse, Claims, LoginRequest, SignupRequest,
-};
+use crate::auth::claims::Claims;
+use crate::auth::jwt::{create_jwt_token_full, decode_jwt_token};
+use crate::auth::mtls::CnfClaim;
+use crate::auth::{AuthResponse, ClientAssertionRequest, LoginRequest, SignupRequest};
 use crate::error::AppError;
 use axum::async_trait;
 use serde::Deserialize;
@@ -12,6 +13,11 @@ use std::sync::{Arc, RwLock};
 pub trait AuthProvider: Send + Sync {
     async fn signup(&self, req: &SignupRequest) -> Result<AuthResponse, AppError>;
     async fn login(&self, req: &LoginRequest) -> Result<AuthResponse, AppError>;
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+        client_cert_fingerprint: Option<String>,
+    ) -> Result<AuthResponse, AppError>;
     async fn verify_token(&self, token: &str) -> Result<Claims, AppError>;
 }
 
@@ -102,6 +108,7 @@ impl AuthProvider for MemoryAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            None,
             ttl_seconds,
         )?;
 
@@ -143,6 +150,60 @@ impl AuthProvider for MemoryAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            None,
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
+            claims,
+        })
+    }
+
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+        client_cert_fingerprint: Option<String>,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let cnf = client_cert_fingerprint.map(CnfClaim::new);
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some("astrea-sda-api".to_string()),
+            Some("astrea-sda-api".to_string()),
+            Some(scope),
+            cnf,
             ttl_seconds,
         )?;
 
@@ -261,6 +322,7 @@ impl AuthProvider for SupabaseAuthProvider {
             role: sanitized_role.to_string(),
             roles: Some(vec![sanitized_role.to_string()]),
             scope: Some(scope.to_string()),
+            cnf: None,
         };
 
         Ok(AuthResponse {
@@ -321,12 +383,66 @@ impl AuthProvider for SupabaseAuthProvider {
             role: role.clone(),
             roles: Some(vec![role]),
             scope: Some("read:satellites".into()),
+            cnf: None,
         };
 
         Ok(AuthResponse {
             token: auth_res.access_token,
             token_type: "Bearer".to_string(),
             expires_in: ttl_seconds,
+            claims,
+        })
+    }
+
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+        client_cert_fingerprint: Option<String>,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let cnf = client_cert_fingerprint.map(CnfClaim::new);
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some(self.supabase_url.clone()),
+            Some("authenticated".to_string()),
+            Some(scope),
+            cnf,
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
             claims,
         })
     }
@@ -408,6 +524,7 @@ impl AuthProvider for PostgresAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            None,
             ttl_seconds,
         )?;
 
@@ -456,6 +573,60 @@ impl AuthProvider for PostgresAuthProvider {
             Some("astrea-sda-api".to_string()),
             Some("astrea-sda-api".to_string()),
             Some(scope.to_string()),
+            None,
+            ttl_seconds,
+        )?;
+
+        Ok(AuthResponse {
+            token,
+            token_type: "Bearer".to_string(),
+            expires_in: ttl_seconds as usize,
+            claims,
+        })
+    }
+
+    async fn client_assertion_token_exchange(
+        &self,
+        req: &ClientAssertionRequest,
+        client_cert_fingerprint: Option<String>,
+    ) -> Result<AuthResponse, AppError> {
+        if req.grant_type != "client_credentials"
+            && req.grant_type != "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        {
+            return Err(AppError::BadRequest(
+                "Unsupported grant_type. Expected 'client_credentials'".into(),
+            ));
+        }
+        if req.client_assertion_type != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Err(AppError::BadRequest(
+                "Unsupported client_assertion_type. Expected 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'".into(),
+            ));
+        }
+
+        let assertion_claims = decode_jwt_token(&req.client_assertion)?;
+        let client_id = assertion_claims.sub;
+        let role = if assertion_claims.role.is_empty() {
+            "editor".to_string()
+        } else {
+            assertion_claims.role
+        };
+
+        let scope = req
+            .scope
+            .clone()
+            .or(assertion_claims.scope)
+            .unwrap_or_else(|| "read:satellites write:satellites".to_string());
+
+        let cnf = client_cert_fingerprint.map(CnfClaim::new);
+
+        let ttl_seconds = 86400;
+        let (token, claims) = create_jwt_token_full(
+            &client_id,
+            &role,
+            Some("astrea-sda-api".to_string()),
+            Some("astrea-sda-api".to_string()),
+            Some(scope),
+            cnf,
             ttl_seconds,
         )?;
 
