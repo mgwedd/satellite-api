@@ -73,24 +73,38 @@ High-performance, low-latency Rust API for Space Domain Awareness (SDA), orbital
 
 ---
 
-### Running with Docker
+---
 
-Build the Alpine container and mount your local `.keys/` directory (or pass `RSA_PRIVATE_KEY` / `RSA_PUBLIC_KEY` environment variables):
+### Running with Docker & Docker Compose
+
+Astrea SDA API provides 3 clear containerization options. See **[DOCKER.md](DOCKER.md)** for detailed container architecture and deployment options.
+
+#### Option 1: One-Command Single Stack Deployment ("Just Works")
+Spins up PostgreSQL 16, Redis 7, Astrea API (with automated schema migrations), and Nginx reverse proxy using Docker DNS networking (`astrea-net`):
 
 ```bash
-# Build the Docker image
-docker build -t astrea-sda-api .
+# Launch full stack in background
+docker compose up -d
 
-# Generate your local custom RSA keypair if not already created
-./scripts/setup-keys.sh
+# Or via script:
+./scripts/docker-prod.sh
+```
+- **Gateway (Nginx)**: `http://localhost:80`
+- **API Endpoint**: `http://localhost:8080`
+- **Swagger UI**: `http://localhost:8080/swagger-ui`
 
-# Run the container mounting your local .keys directory
-docker run -p 8080:8080 -v "$(pwd)/.keys:/app/.keys:ro" astrea-sda-api
+#### Option 2: Containerized Local Dev with Hot-Reloading (`cargo watch`)
+Runs source files inside a container with live hot-reloading on code edits:
+
+```bash
+./scripts/docker-dev.sh
 ```
 
-To generate matching RS256 tokens for the running container:
+#### Option 3: Production Image Container Build
+Builds an optimized, unprivileged production container (`astrea-sda-api:latest`) with multi-stage build testing:
+
 ```bash
-./scripts/make-jwt.sh operator_user operator
+./scripts/docker-build.sh
 ```
 
 ---
