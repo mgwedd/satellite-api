@@ -48,7 +48,7 @@ The codebase follows a modular, layered architecture:
 All agents should use the self-documenting `Makefile` for local operations:
 
 ```bash
-make dev-hot      # Host app hot-reload + containerized dependencies (Postgres + Redis + Nginx)
+make dev-hot      # Host app hot-reload + containerized dependencies (Postgres + Redis + Caddy)
 make dev          # Fully containerized local dev stack
 make prod         # Build production container image
 make install-dev  # Full developer environment setup

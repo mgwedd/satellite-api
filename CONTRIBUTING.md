@@ -30,13 +30,13 @@ We warmly welcome and encourage the use of coding agents and AI development tool
 - **Make**
 
 ### 1. Initial Setup
-Initialize dev environment, local RSA keypairs (`.keys/`), dev TLS certificates, Git pre-commit hooks, and tools:
+Initialize dev environment, local RSA keypairs (`.keys/`), Git pre-commit hooks, and tools:
 ```bash
 make install-dev
 ```
 
 ### 2. Launch Local Environment
-Run the hot-reloading development stack (Postgres + Redis + Nginx Gateway + host `cargo-watch`):
+Run the hot-reloading development stack (Postgres + Redis + Caddy Gateway + host `cargo-watch`):
 ```bash
 make dev-hot
 ```
