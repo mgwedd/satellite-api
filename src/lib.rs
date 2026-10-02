@@ -117,9 +117,12 @@ pub fn default_auth_provider() -> std::sync::Arc<dyn auth::provider::AuthProvide
             return std::sync::Arc::new(auth::provider::SupabaseAuthProvider::new(url, key));
         }
     }
-    if let Ok(db_url) = std::env::var("DATABASE_URL") {
-        if !db_url.trim().is_empty() {
-            if let Ok(pool) = sqlx::PgPool::connect_lazy(&db_url) {
+    let db_url = std::env::var("POSTGRES_URI")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok();
+    if let Some(url) = db_url {
+        if !url.trim().is_empty() {
+            if let Ok(pool) = sqlx::PgPool::connect_lazy(&url) {
                 return std::sync::Arc::new(auth::provider::PostgresAuthProvider::new(pool));
             }
         }

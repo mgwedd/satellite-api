@@ -21,9 +21,13 @@ impl SatelliteRepository {
     pub async fn new(redis_url: Option<&str>) -> Self {
         let cache = TieredCache::new(redis_url, Duration::from_secs(300)).await;
 
-        let provider: Arc<dyn DataProvider> = if let Ok(db_url) = std::env::var("DATABASE_URL") {
-            if !db_url.trim().is_empty() {
-                if let Ok(pg) = SupabasePostgresDataProvider::connect(&db_url).await {
+        let db_url = std::env::var("POSTGRES_URI")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .ok();
+
+        let provider: Arc<dyn DataProvider> = if let Some(url) = db_url {
+            if !url.trim().is_empty() {
+                if let Ok(pg) = SupabasePostgresDataProvider::connect(&url).await {
                     Arc::new(pg)
                 } else {
                     Arc::new(MemoryDataProvider::new())

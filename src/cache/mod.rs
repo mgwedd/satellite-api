@@ -19,22 +19,30 @@ impl TieredCache {
             .time_to_live(default_ttl)
             .build();
 
-        let l2_redis = if let Some(url) = redis_url {
-            match redis::Client::open(url) {
-                Ok(client) => match ConnectionManager::new(client).await {
-                    Ok(manager) => {
-                        debug!("Connected to L2 Redis Cache at {}", url);
-                        Some(manager)
-                    }
+        let effective_redis_url = redis_url
+            .map(String::from)
+            .or_else(|| std::env::var("REDIS_URL").ok());
+
+        let l2_redis = if let Some(ref url) = effective_redis_url {
+            if !url.trim().is_empty() {
+                match redis::Client::open(url.as_str()) {
+                    Ok(client) => match ConnectionManager::new(client).await {
+                        Ok(manager) => {
+                            tracing::info!("Connected to L2 Redis Cache at {}", url);
+                            Some(manager)
+                        }
+                        Err(err) => {
+                            warn!("Failed to create Redis connection manager: {:?}", err);
+                            None
+                        }
+                    },
                     Err(err) => {
-                        warn!("Failed to create Redis connection manager: {:?}", err);
+                        warn!("Failed to open Redis client: {:?}", err);
                         None
                     }
-                },
-                Err(err) => {
-                    warn!("Failed to open Redis client: {:?}", err);
-                    None
                 }
+            } else {
+                None
             }
         } else {
             None
