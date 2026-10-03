@@ -70,6 +70,22 @@ pub struct PipelineSyncResponse {
     pub message: String,
 }
 
+fn map_calculation_error(e: String) -> AppError {
+    if e.contains("NotFound")
+        || e.contains("Satellite not found")
+        || e.contains("No satellite overhead found")
+    {
+        AppError::NotFound
+    } else if e.contains("Sgp4Error")
+        || e.contains("SGP4 calculation error")
+        || e.contains("Failed to parse TLE")
+    {
+        AppError::Sgp4Error(e)
+    } else {
+        AppError::InternalServerError(e)
+    }
+}
+
 /// Create Satellite
 ///
 /// Creates a new satellite record from Two-Line Element (TLE) set data. Protected by JWT auth (requires 'editor' or 'admin' role).
@@ -317,13 +333,7 @@ pub async fn get_overhead(
             overhead_res.ok_or_else(|| "No satellite overhead found".to_string())
         })
         .await
-        .map_err(|e| {
-            if e == "No satellite overhead found" {
-                AppError::NotFound
-            } else {
-                AppError::InternalServerError(e)
-            }
-        })?;
+        .map_err(map_calculation_error)?;
 
     Ok(Json(res))
 }
@@ -379,7 +389,7 @@ pub async fn get_next_visible(
             pass_res.map_err(|e| e.to_string())
         })
         .await
-        .map_err(AppError::InternalServerError)?;
+        .map_err(map_calculation_error)?;
 
     Ok(Json(res))
 }
@@ -454,7 +464,7 @@ pub async fn get_ground_track(
             track_res.map_err(|e| e.to_string())
         })
         .await
-        .map_err(AppError::InternalServerError)?;
+        .map_err(map_calculation_error)?;
 
     Ok(Json(res))
 }
@@ -520,7 +530,7 @@ pub async fn get_satellite_illumination(
             illum_res.map_err(|e| e.to_string())
         })
         .await
-        .map_err(AppError::InternalServerError)?;
+        .map_err(map_calculation_error)?;
 
     Ok(Json(res))
 }
@@ -661,7 +671,7 @@ pub async fn get_satellite_doppler(
             doppler_res.map_err(|e| e.to_string())
         })
         .await
-        .map_err(AppError::InternalServerError)?;
+        .map_err(map_calculation_error)?;
 
     Ok(Json(res))
 }

@@ -277,7 +277,7 @@ impl PostgresDataProvider {
             })?;
 
         // Automatically run initial schema setup / migrations
-        let _ = sqlx::query(
+        let schema_statements = [
             r#"
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -287,7 +287,8 @@ impl PostgresDataProvider {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-
+            "#,
+            r#"
             CREATE TABLE IF NOT EXISTS satellites (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name TEXT NOT NULL,
@@ -297,7 +298,8 @@ impl PostgresDataProvider {
                 created_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_modified_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-
+            "#,
+            r#"
             CREATE TABLE IF NOT EXISTS tle_history (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 satellite_id UUID NOT NULL REFERENCES satellites(id) ON DELETE CASCADE,
@@ -306,14 +308,14 @@ impl PostgresDataProvider {
                 epoch TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-
-            ALTER TABLE satellites ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE tle_history ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE users ENABLE ROW LEVEL SECURITY;
             "#,
-        )
-        .execute(&pool)
-        .await;
+        ];
+
+        for stmt in schema_statements {
+            if let Err(e) = sqlx::query(stmt).execute(&pool).await {
+                tracing::warn!("Schema migration statement notice: {}", e);
+            }
+        }
 
         Ok(Self { pool })
     }

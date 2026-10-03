@@ -7,22 +7,34 @@ cd "$DIR"
 # Ensure local RSA keypair exists in .keys/
 "$DIR/scripts/setup-keys.sh" > /dev/null 2>&1
 
-USERNAME="${1:-admin_user}"
-ROLE="${2:-admin}"
-TTL_SECONDS="${3:-86400}"
+RAW=0
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--raw" ] || [ "$arg" = "-q" ]; then
+        RAW=1
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+USERNAME="${ARGS[0]:-admin_user}"
+ROLE="${ARGS[1]:-admin}"
+TTL_SECONDS="${ARGS[2]:-86400}"
 
 KEYS_DIR="$DIR/.keys"
 PRIV_KEY="${LOCAL_DEV_RSA_PRIVATE_KEY_FILE:-${RSA_PRIVATE_KEY_FILE:-$KEYS_DIR/rsa_private.pem}}"
 
-echo "=========================================================="
-echo "🔑 Astrea SDA API - Local RS256 JWT Token Generator"
-echo "=========================================================="
-echo "  Subject   : $USERNAME"
-echo "  Role      : $ROLE"
-echo "  Algorithm : RS256 (RSA 2048-bit Asymmetric)"
-echo "  Key File  : $PRIV_KEY"
-echo "  Lifetime  : ${TTL_SECONDS}s"
-echo "=========================================================="
+if [ "$RAW" -eq 0 ]; then
+    echo "==========================================================" >&2
+    echo "🔑 Astrea SDA API - Local RS256 JWT Token Generator" >&2
+    echo "==========================================================" >&2
+    echo "  Subject   : $USERNAME" >&2
+    echo "  Role      : $ROLE" >&2
+    echo "  Algorithm : RS256 (RSA 2048-bit Asymmetric)" >&2
+    echo "  Key File  : $PRIV_KEY" >&2
+    echo "  Lifetime  : ${TTL_SECONDS}s" >&2
+    echo "==========================================================" >&2
+fi
 
 TOKEN=$(python3 -c "
 import json, base64, time, sys
@@ -55,10 +67,16 @@ sig_b64 = b64url(sig)
 print(f'{h_b64}.{c_b64}.{sig_b64}')
 ")
 
-echo ""
-echo "Generated RS256 Bearer Token:"
+if [ "$RAW" -eq 0 ]; then
+    echo "" >&2
+    echo "Generated RS256 Bearer Token:" >&2
+fi
+
 echo "$TOKEN"
-echo ""
-echo "cURL Usage Example:"
-echo "  curl -H \"Authorization: Bearer $TOKEN\" http://localhost:8080/v1/satellites"
-echo "=========================================================="
+
+if [ "$RAW" -eq 0 ]; then
+    echo "" >&2
+    echo "cURL Usage Example:" >&2
+    echo "  curl -H \"Authorization: Bearer $TOKEN\" http://localhost:8080/v1/satellites" >&2
+    echo "==========================================================" >&2
+fi

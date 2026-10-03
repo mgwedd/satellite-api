@@ -133,9 +133,10 @@ pub fn default_auth_provider() -> std::sync::Arc<dyn auth::provider::AuthProvide
     std::sync::Arc::new(auth::provider::MemoryAuthProvider::new())
 }
 
-pub fn create_router_with_auth(
+pub fn create_router_with_auth_and_limiter(
     repo: SatelliteRepository,
     auth_provider: std::sync::Arc<dyn auth::provider::AuthProvider>,
+    limiter: std::sync::Arc<dyn services::ratelimit::RateLimiter>,
 ) -> Router {
     let auth_routes = Router::new()
         .route("/signup", post(auth::signup_handler))
@@ -186,7 +187,11 @@ pub fn create_router_with_auth(
         .route("/transits/solar", get(handlers::get_solar_transits))
         .route("/transits/lunar", get(handlers::get_lunar_transits))
         .route("/pipelines/sync", post(handlers::trigger_pipeline_sync))
-        .with_state(repo);
+        .with_state(repo)
+        .layer(axum::middleware::from_fn_with_state(
+            limiter,
+            services::ratelimit::middleware::rate_limit_layer,
+        ));
 
     const REDOC_HTML: &str = r#"<!DOCTYPE html>
 <html>
@@ -211,6 +216,17 @@ pub fn create_router_with_auth(
         .nest("/api/v1", api_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
+}
+
+pub fn create_router_with_auth(
+    repo: SatelliteRepository,
+    auth_provider: std::sync::Arc<dyn auth::provider::AuthProvider>,
+) -> Router {
+    create_router_with_auth_and_limiter(
+        repo,
+        auth_provider,
+        std::sync::Arc::new(services::ratelimit::NoOpRateLimiter),
+    )
 }
 
 pub fn create_router(repo: SatelliteRepository) -> Router {
