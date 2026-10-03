@@ -51,9 +51,9 @@ fn test_openapi_schema_static_contract() {
         "Missing or invalid operationId for DELETE /v1/satellites/{{id}}"
     );
     assert!(
-        paths["/v1/astrodynamics/overhead"]["get"]["operationId"].as_str()
+        paths["/v1/satellites/overhead"]["get"]["operationId"].as_str()
             == Some("getOverheadSatellite"),
-        "Missing or invalid operationId for GET /v1/astrodynamics/overhead"
+        "Missing or invalid operationId for GET /v1/satellites/overhead"
     );
     assert!(
         paths["/v1/satellites/{id}/next-visible"]["get"]["operationId"].as_str()
@@ -102,6 +102,78 @@ fn test_openapi_schema_static_contract() {
         paths["/v1/pipelines/sync"]["post"]["operationId"].as_str() == Some("triggerPipelineSync"),
         "Missing or invalid operationId for POST /v1/pipelines/sync"
     );
+
+    // Verify REST Architecture Tag Separation:
+    // Satellite-scoped endpoints belong to the "Satellites" resource tag
+    let sat_endpoints = [
+        (&paths["/v1/satellites"]["get"], "listSatellites"),
+        (&paths["/v1/satellites"]["post"], "createSatellite"),
+        (&paths["/v1/satellites/{id}"]["get"], "getSatellite"),
+        (
+            &paths["/v1/satellites/overhead"]["get"],
+            "getOverheadSatellite",
+        ),
+        (
+            &paths["/v1/satellites/{id}/next-visible"]["get"],
+            "getNextVisiblePass",
+        ),
+        (
+            &paths["/v1/satellites/{id}/groundtrack"]["get"],
+            "getGroundTrack",
+        ),
+        (
+            &paths["/v1/satellites/{id}/illumination"]["get"],
+            "getSatelliteIllumination",
+        ),
+        (
+            &paths["/v1/satellites/{id}/doppler"]["get"],
+            "getSatelliteDoppler",
+        ),
+        (
+            &paths["/v1/satellites/{id}/maneuvers"]["get"],
+            "getSatelliteManeuvers",
+        ),
+        (
+            &paths["/v1/satellites/{id}/detect-anomalies"]["post"],
+            "detectSatelliteAnomalies",
+        ),
+    ];
+    for (endpoint, op) in sat_endpoints {
+        assert_eq!(
+            endpoint["tags"][0].as_str(),
+            Some("Satellites"),
+            "Expected 'Satellites' tag for operation {}",
+            op
+        );
+        assert!(
+            endpoint["security"].is_array(),
+            "Expected bearer_auth security for operation {}",
+            op
+        );
+    }
+
+    // Cross-satellite / celestial interactions belong to "Astrodynamics" resource tag
+    let astro_endpoints = [
+        (
+            &paths["/v1/conjunctions/search"]["get"],
+            "searchConjunctions",
+        ),
+        (&paths["/v1/transits/solar"]["get"], "getSolarTransits"),
+        (&paths["/v1/transits/lunar"]["get"], "getLunarTransits"),
+    ];
+    for (endpoint, op) in astro_endpoints {
+        assert_eq!(
+            endpoint["tags"][0].as_str(),
+            Some("Astrodynamics"),
+            "Expected 'Astrodynamics' tag for operation {}",
+            op
+        );
+        assert!(
+            endpoint["security"].is_array(),
+            "Expected bearer_auth security for operation {}",
+            op
+        );
+    }
 
     // 4. Component Schemas & Security Schemes Contract Verification
     let schemas = &v["components"]["schemas"];

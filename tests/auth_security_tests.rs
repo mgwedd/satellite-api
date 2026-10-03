@@ -406,3 +406,130 @@ async fn test_auth_security_mtls_certificate_bound_token_validation() {
         "mTLS request missing client cert fingerprint header must be rejected"
     );
 }
+
+#[tokio::test]
+async fn test_unauthenticated_requests_are_rejected_except_login_and_docs() {
+    let repo = SatelliteRepository::new(None).await;
+    let app = create_router(repo);
+
+    // 1. Documentation & Login Endpoints MUST be accessible without authentication
+    let allowed_unauthed_endpoints = [
+        ("GET", "/", None),
+        ("GET", "/docs", None),
+        ("GET", "/swagger-ui/", None),
+        ("GET", "/api-docs/openapi.json", None),
+        (
+            "POST",
+            "/v1/auth/login",
+            Some(
+                json!({
+                    "email": "admin@astrea.local",
+                    "password": "password123"
+                })
+                .to_string(),
+            ),
+        ),
+    ];
+
+    for (method, uri, body) in allowed_unauthed_endpoints {
+        let mut builder = Request::builder().method(method).uri(uri);
+        let req_body = if let Some(b) = body {
+            builder = builder.header("content-type", "application/json");
+            Body::from(b)
+        } else {
+            Body::empty()
+        };
+        let response = app
+            .clone()
+            .oneshot(builder.body(req_body).unwrap())
+            .await
+            .unwrap();
+        assert_ne!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Endpoint {} {} must not return 401 Unauthorized without auth",
+            method,
+            uri
+        );
+    }
+
+    // 2. All Protected Endpoints MUST strictly return 401 Unauthorized without authentication
+    let dummy_id = "00000000-0000-0000-0000-000000000000";
+    let protected_endpoints = [
+        ("GET", "/v1/auth/me", None),
+        ("GET", "/v1/satellites", None),
+        (
+            "POST",
+            "/v1/satellites",
+            Some(json!({"name": "Test"}).to_string()),
+        ),
+        ("GET", &format!("/v1/satellites/{}", dummy_id), None),
+        (
+            "PATCH",
+            &format!("/v1/satellites/{}", dummy_id),
+            Some(json!({"name": "Test"}).to_string()),
+        ),
+        ("DELETE", &format!("/v1/satellites/{}", dummy_id), None),
+        ("GET", "/v1/satellites/overhead?lat=0&lon=0", None),
+        ("GET", "/v1/astrodynamics/overhead?lat=0&lon=0", None),
+        (
+            "GET",
+            &format!("/v1/satellites/{}/next-visible?lat=0&lon=0", dummy_id),
+            None,
+        ),
+        (
+            "GET",
+            &format!("/v1/satellites/{}/groundtrack", dummy_id),
+            None,
+        ),
+        (
+            "GET",
+            &format!("/v1/satellites/{}/illumination?lat=0&lon=0", dummy_id),
+            None,
+        ),
+        (
+            "GET",
+            &format!(
+                "/v1/satellites/{}/doppler?center_freq_hz=437500000&lat=0&lon=0",
+                dummy_id
+            ),
+            None,
+        ),
+        (
+            "GET",
+            &format!("/v1/satellites/{}/maneuvers", dummy_id),
+            None,
+        ),
+        (
+            "POST",
+            &format!("/v1/satellites/{}/detect-anomalies", dummy_id),
+            None,
+        ),
+        ("GET", "/v1/conjunctions/search", None),
+        ("GET", "/v1/transits/solar?lat=0&lon=0", None),
+        ("GET", "/v1/transits/lunar?lat=0&lon=0", None),
+        ("POST", "/v1/pipelines/sync", None),
+    ];
+
+    for (method, uri, body) in protected_endpoints {
+        let mut builder = Request::builder().method(method).uri(uri);
+        let req_body = if let Some(b) = body {
+            builder = builder.header("content-type", "application/json");
+            Body::from(b)
+        } else {
+            Body::empty()
+        };
+        let response = app
+            .clone()
+            .oneshot(builder.body(req_body).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Protected endpoint {} {} MUST return 401 Unauthorized when missing Bearer token",
+            method,
+            uri
+        );
+    }
+}
