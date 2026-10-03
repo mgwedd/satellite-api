@@ -49,6 +49,7 @@ pub struct Claims {
     /// Issued-at timestamp in seconds since Unix epoch
     pub iat: usize,
     /// User role ("viewer", "editor", or "admin")
+    #[serde(default)]
     pub role: String,
     /// Optional list of secondary roles
     #[serde(skip_serializing_if = "Option::is_none")]

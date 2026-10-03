@@ -1,6 +1,5 @@
 use astrea_sda_api::{
-    config::Config, create_router, repository::SatelliteRepository,
-    services::pipeline::DiscoveryPipeline,
+    config::Config, repository::SatelliteRepository, services::pipeline::DiscoveryPipeline,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -30,7 +29,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         DiscoveryPipeline::start_background_sync(repo.clone(), 6);
     }
 
-    let app = create_router(repo);
+    let rate_limit_config = astrea_sda_api::services::ratelimit::RateLimitConfig::from_env();
+    let limiter: std::sync::Arc<dyn astrea_sda_api::services::ratelimit::RateLimiter> =
+        astrea_sda_api::services::ratelimit::build_rate_limiter_from_url(
+            rate_limit_config,
+            redis_url.as_deref(),
+        )
+        .await
+        .into();
+
+    let app = astrea_sda_api::create_router_with_auth_and_limiter(
+        repo,
+        astrea_sda_api::default_auth_provider(),
+        limiter,
+    );
 
     let addr = config.socket_addr();
     tracing::info!("🛰️ Astrea SDA API listening on http://{}", addr);
